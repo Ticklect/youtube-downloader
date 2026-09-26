@@ -1,14 +1,38 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from pathlib import Path
+from typing import Callable
 
 from .settings import safe_child
+from .transcripts import vtt_to_text
+
+try:
+    from yt_dlp import YoutubeDL
+except ImportError:
+    YoutubeDL = None  # type: ignore[assignment]
 
 
 ARTIFACT_KINDS = {"video", "audio", "transcript"}
 INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*]')
 WINDOWS_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+@dataclass(frozen=True)
+class DownloadRequest:
+    video_id: str
+    url: str
+    title: str
+    channel_name: str
+    mode: str
+    quality: str
+
+
+@dataclass(frozen=True)
+class ItemResult:
+    state: str
+    message: str = ""
 
 
 def sanitize_component(value: str) -> str:
@@ -117,3 +141,79 @@ class ArtifactArchives:
         if video_id not in existing:
             with path.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(video_id + "\n")
+
+
+def _artifact_kinds(mode: str) -> list[str]:
+    if mode == "everything":
+        return ["video", "audio", "transcript"]
+    if mode in ARTIFACT_KINDS:
+        return [mode]
+    raise ValueError("Unsupported download mode.")
+
+
+def _progress_hook(progress_cb: Callable[[dict], None], artifact: str):
+    def hook(data: dict) -> None:
+        status = data.get("status")
+        update: dict = {"artifact": artifact, "status": status or "active"}
+        downloaded = data.get("downloaded_bytes")
+        total = data.get("total_bytes") or data.get("total_bytes_estimate")
+        if isinstance(downloaded, (int, float)) and isinstance(total, (int, float)) and total > 0:
+            update["percent"] = max(0.0, min(100.0, (downloaded / total) * 100.0))
+        progress_cb(update)
+    return hook
+
+
+def _run_yt_dlp(request: DownloadRequest, root: Path, artifact: str, progress_cb: Callable[[dict], None]) -> None:
+    if YoutubeDL is None:
+        raise RuntimeError("yt-dlp is not installed.")
+    output_dir = build_video_dir(root, request.channel_name, request.title, request.video_id)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    options = build_ydl_options(artifact, request.quality, output_dir)
+    options["progress_hooks"] = [_progress_hook(progress_cb, artifact)]
+    with YoutubeDL(options) as ydl:
+        result = ydl.download([request.url])
+    if result not in (None, 0):
+        raise RuntimeError(f"yt-dlp failed for {artifact}.")
+
+
+def _finalize_transcript(request: DownloadRequest, root: Path) -> bool:
+    output_dir = build_video_dir(root, request.channel_name, request.title, request.video_id)
+    candidates = sorted(output_dir.glob("transcript*.vtt"), key=lambda path: (path.name != "transcript.vtt", len(path.name), path.name))
+    if not candidates:
+        return False
+    selected = candidates[0]
+    target = output_dir / "transcript.vtt"
+    if selected != target:
+        if target.exists():
+            target.unlink()
+        selected.replace(target)
+    text = vtt_to_text(target.read_text(encoding="utf-8", errors="replace"))
+    (output_dir / "transcript.txt").write_text(text, encoding="utf-8")
+    return True
+
+
+def download_item(request: DownloadRequest, root: Path, progress_cb: Callable[[dict], None]) -> ItemResult:
+    root = Path(root).resolve()
+    archives = ArtifactArchives(root)
+    kinds = _artifact_kinds(request.mode)
+    pending = [kind for kind in kinds if not archives.contains(kind, request.video_id)]
+    if not pending:
+        return ItemResult("skipped", "Requested output already exists in the archive.")
+
+    transcript_unavailable = False
+    try:
+        for artifact in pending:
+            _run_yt_dlp(request, root, artifact, progress_cb)
+            if artifact == "transcript":
+                if not _finalize_transcript(request, root):
+                    transcript_unavailable = True
+                    continue
+            archives.mark_complete(artifact, request.video_id)
+    except Exception as exc:
+        return ItemResult("failed", str(exc))
+
+    if transcript_unavailable and request.mode == "transcript":
+        return ItemResult("unavailable", "No captions were available for this video.")
+    if transcript_unavailable:
+        return ItemResult("completed", "Media downloaded; transcript was unavailable.")
+    return ItemResult("completed")
