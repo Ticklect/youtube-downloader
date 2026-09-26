@@ -56,6 +56,8 @@ def create_app(
     @app.before_request
     def security_gate():
         origin = request.headers.get("Origin")
+        if request.method == "GET" and not origin:
+            return None
         if not _valid_extension_origin(origin):
             return _error("extension_origin_required", "Requests must come from the Chrome extension.", 403)
         if request.method == "OPTIONS":

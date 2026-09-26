@@ -34,20 +34,26 @@ def make_client(tmp_path, **kwargs):
     return app.test_client(), store
 
 
-def test_health_requires_extension_origin_and_reports_dependencies(tmp_path):
+def test_health_allows_originless_get_but_rejects_web_origin(tmp_path):
     checker = lambda: DependencyStatus(True, False, ["FFmpeg missing"])
     client, _ = make_client(tmp_path, dependency_checker=checker)
 
-    assert client.get("/health").status_code == 403
+    originless = client.get("/health")
     assert client.get("/health", headers={"Origin": "https://example.com"}).status_code == 403
     response = client.get("/health", headers={"Origin": ORIGIN})
 
+    assert originless.status_code == 200
+    assert originless.get_json()["dependencies"] == {"yt_dlp": True, "ffmpeg": False, "messages": ["FFmpeg missing"]}
     assert response.status_code == 200
     assert response.get_json()["dependencies"] == {"yt_dlp": True, "ffmpeg": False, "messages": ["FFmpeg missing"]}
 
 
 def test_state_changing_requests_require_custom_header(tmp_path):
     client, _ = make_client(tmp_path)
+    originless = client.post("/folder/pick", headers={"X-YCD-Client": "1"})
+    assert originless.status_code == 403
+    assert originless.get_json()["error"]["code"] == "extension_origin_required"
+
     response = client.post("/folder/pick", headers={"Origin": ORIGIN})
     assert response.status_code == 403
     assert response.get_json()["error"]["code"] == "client_header_required"
