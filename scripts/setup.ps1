@@ -2,6 +2,15 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Venv = Join-Path $Root ".venv"
 
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    throw "Python 3.11 or newer is required and was not found on PATH."
+}
+
+python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Python 3.11 or newer is required."
+}
+
 if (-not (Test-Path $Venv)) {
     python -m venv $Venv
 }
