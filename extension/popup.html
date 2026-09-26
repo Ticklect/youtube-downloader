@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Channel Downloader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>Channel Downloader</h1>
+        <p>Video, audio and transcripts through your local helper.</p>
+      </div>
+      <span id="helperStatus" class="status status-offline">Offline</span>
+    </header>
+
+    <section class="panel">
+      <label for="channelUrl">YouTube channel</label>
+      <div class="input-row">
+        <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off">
+        <button id="loadChannel" class="primary">Load</button>
+      </div>
+      <p id="channelMessage" class="message"></p>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Download location</span>
+          <strong id="folderPath">No folder selected</strong>
+        </div>
+        <button id="chooseFolder" class="secondary">Choose Folder</button>
+      </div>
+    </section>
+
+    <section id="videoSection" class="panel hidden">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Videos</span>
+          <strong id="channelName">Channel</strong>
+        </div>
+        <span id="selectionCount" class="muted">0 selected</span>
+      </div>
+      <div class="toolbar">
+        <button id="selectAll" class="text-button">Select all</button>
+        <button id="clearAll" class="text-button">Clear</button>
+      </div>
+      <div id="videoList" class="video-list"></div>
+    </section>
+
+    <section class="panel options-grid">
+      <label>
+        <span>Output</span>
+        <select id="mode">
+          <option value="video">Video</option>
+          <option value="audio">Audio (MP3)</option>
+          <option value="transcript">Transcript</option>
+          <option value="everything">Everything</option>
+        </select>
+      </label>
+      <label>
+        <span>Video quality</span>
+        <select id="quality">
+          <option value="360">360p</option>
+          <option value="720">720p</option>
+          <option value="1080">1080p</option>
+          <option value="best">Best available</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="actions">
+      <button id="startDownload" class="primary large" disabled>Download Selected</button>
+      <button id="retryFailed" class="secondary hidden">Retry Failed</button>
+    </section>
+
+    <section id="progressPanel" class="panel hidden">
+      <div class="section-heading">
+        <strong>Progress</strong>
+        <span id="progressSummary" class="muted"></span>
+      </div>
+      <div id="jobItems" class="job-list"></div>
+    </section>
+
+    <p id="errorMessage" class="error hidden"></p>
+    <footer>Use only for content you own or have permission to download.</footer>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
