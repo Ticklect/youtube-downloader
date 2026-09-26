@@ -5,13 +5,13 @@ import pytest
 from helper.downloader import ArtifactArchives, build_video_dir, build_ydl_options, sanitize_component
 
 
-@pytest.mark.parametrize("value", ['bad<>:"/\\|?*name', 'trailing. ', 'CON', 'COM1'])
+@pytest.mark.parametrize("value", ['bad<>:"/\\|?*name', 'trailing. ', 'CON', 'COM1', 'CON.txt', 'LPT1.log'])
 def test_sanitize_component_removes_windows_invalid_names(value):
     result = sanitize_component(value)
     assert result
     assert not any(char in result for char in '<>:"/\\|?*')
     assert not result.endswith((".", " "))
-    assert result.upper() not in {"CON", "COM1"}
+    assert result.split(".", 1)[0].upper() not in {"CON", "COM1", "LPT1"}
 
 
 def test_build_video_dir_keeps_video_id_and_limits_long_title(tmp_path):
@@ -26,6 +26,13 @@ def test_video_options_cap_requested_height(tmp_path, quality, height):
     options = build_ydl_options("video", quality, tmp_path)
     assert f"height<={height}" in options["format"]
     assert str(options["outtmpl"]).endswith("video.%(ext)s")
+
+
+def test_capped_video_format_never_falls_back_above_cap_and_does_not_force_mp4(tmp_path):
+    options = build_ydl_options("video", "720", tmp_path)
+    assert options["format"] == "bestvideo*[height<=720]+bestaudio/best[height<=720]"
+    assert options["format_sort"] == ["res", "ext:mp4:m4a"]
+    assert "merge_output_format" not in options
 
 
 def test_best_video_options_have_no_height_cap(tmp_path):

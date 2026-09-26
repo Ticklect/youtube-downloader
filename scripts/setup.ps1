@@ -22,6 +22,7 @@ $Python = Join-Path $Venv "Scripts\python.exe"
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Warning "FFmpeg is not on PATH. Install FFmpeg before downloading video/audio."
     Write-Host "Example: winget install Gyan.FFmpeg"
+    throw "Setup incomplete: FFmpeg is required for the full video/audio downloader."
 } else {
     Write-Host "FFmpeg found."
 }

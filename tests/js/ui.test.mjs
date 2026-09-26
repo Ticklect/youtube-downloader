@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   canStartDownload,
   clearSelection,
+  normalizeCurrentJobId,
   normalizePreferences,
   selectAllVideos,
   summarizeProgress,
@@ -17,12 +18,40 @@ test("select all and clear selection use video ids", () => {
 });
 
 test("download stays disabled without folder selection or helper connectivity", () => {
-  const base = { folderPath: "C:/Downloads", selectedIds: new Set(["a"]), helperOnline: true, downloading: false };
+  const base = {
+    folderPath: "C:/Downloads",
+    selectedIds: new Set(["a"]),
+    helperOnline: true,
+    downloading: false,
+    mode: "video",
+    dependencies: { yt_dlp: true, ffmpeg: true },
+  };
   assert.equal(canStartDownload(base), true);
   assert.equal(canStartDownload({ ...base, folderPath: "" }), false);
   assert.equal(canStartDownload({ ...base, selectedIds: new Set() }), false);
   assert.equal(canStartDownload({ ...base, helperOnline: false }), false);
   assert.equal(canStartDownload({ ...base, downloading: true }), false);
+});
+
+test("dependency capabilities allow transcript without ffmpeg but block media", () => {
+  const base = {
+    folderPath: "C:/Downloads",
+    selectedIds: new Set(["a"]),
+    helperOnline: true,
+    downloading: false,
+    dependencies: { yt_dlp: true, ffmpeg: false },
+  };
+  assert.equal(canStartDownload({ ...base, mode: "transcript" }), true);
+  assert.equal(canStartDownload({ ...base, mode: "video" }), false);
+  assert.equal(canStartDownload({ ...base, mode: "audio" }), false);
+  assert.equal(canStartDownload({ ...base, mode: "everything" }), false);
+  assert.equal(canStartDownload({ ...base, mode: "transcript", dependencies: { yt_dlp: false, ffmpeg: true } }), false);
+});
+
+test("current job id normalization keeps only non-empty strings", () => {
+  assert.equal(normalizeCurrentJobId(" job-123 "), "job-123");
+  assert.equal(normalizeCurrentJobId(""), null);
+  assert.equal(normalizeCurrentJobId(123), null);
 });
 
 test("remembered preferences are normalized to supported values", () => {

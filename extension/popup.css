@@ -16,6 +16,7 @@ h1 { font-size: 20px; margin: 0 0 3px; letter-spacing: -.02em; }
 .topbar p { margin: 0; color: #9298a5; font-size: 12px; }
 .status { border: 1px solid #2c3038; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 700; }
 .status-online { background: #12251b; border-color: #255d3a; color: #8ce3ad; }
+.status-limited { background: #2a2415; border-color: #67551f; color: #f1d477; }
 .status-offline { background: #271618; border-color: #653139; color: #f39aa5; }
 .panel { background: #14161b; border: 1px solid #242832; border-radius: 12px; padding: 13px; margin-bottom: 10px; }
 label { color: #c8ccd5; font-size: 12px; font-weight: 650; }

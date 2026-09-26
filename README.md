@@ -81,19 +81,19 @@ The exact video container can differ when YouTube does not provide a compatible 
 
 ## Troubleshooting
 
-**Offline / Local helper is not running**  
+**Offline / Local helper is not running**
 Run `powershell -ExecutionPolicy Bypass -File scripts/start-helper.ps1`.
 
-**Needs setup / FFmpeg missing**  
+**Limited / FFmpeg missing**
 Run `scripts/setup.ps1` again and install FFmpeg if it reports that FFmpeg is not on PATH.
 
-**No public videos found**  
+**No public videos found**
 Make sure you pasted a channel URL, not an individual watch or Shorts URL. Private and member-only videos are not supported.
 
-**Transcript unavailable**  
+**Transcript unavailable**
 The video does not expose usable creator captions or automatic captions. The rest of the queue continues normally.
 
-**Folder no longer works**  
+**Folder no longer works**
 If the saved folder was moved, deleted, or became unwritable, click **Choose Folder** again.
 
 ## Permission and limits

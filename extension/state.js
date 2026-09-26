@@ -9,8 +9,17 @@ export function clearSelection() {
   return new Set();
 }
 
-export function canStartDownload({ folderPath, selectedIds, helperOnline, downloading }) {
-  return Boolean(folderPath) && selectedIds.size > 0 && helperOnline && !downloading;
+export function canStartDownload({ folderPath, selectedIds, helperOnline, downloading, mode, dependencies }) {
+  if (!Boolean(folderPath) || selectedIds.size === 0 || !helperOnline || downloading) return false;
+  if (!dependencies?.yt_dlp) return false;
+  if (mode === "transcript") return true;
+  return Boolean(dependencies?.ffmpeg);
+}
+
+export function normalizeCurrentJobId(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized || null;
 }
 
 export function normalizePreferences(raw = {}) {

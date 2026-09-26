@@ -15,6 +15,7 @@ ITEM_STATES = ("queued", "active", "completed", "skipped", "unavailable", "faile
 class JobManager:
     def __init__(self, max_workers: int = 2):
         self.max_workers = max_workers
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._jobs: dict[str, dict] = {}
         self._lock = threading.RLock()
 
@@ -68,17 +69,16 @@ class JobManager:
             job = self._jobs[job_id]
             root = job["root"]
             count = len(job["items"])
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self._execute_item, job_id, index, root): index for index in range(count)}
-            for future in as_completed(futures):
-                index = futures[future]
-                result = future.result()
-                with self._lock:
-                    item = self._jobs[job_id]["items"][index]
-                    item["state"] = result.state if result.state in ITEM_STATES else "failed"
-                    item["message"] = result.message
-                    if item["state"] in {"completed", "skipped", "unavailable"}:
-                        item["percent"] = 100.0
+        futures = {self._executor.submit(self._execute_item, job_id, index, root): index for index in range(count)}
+        for future in as_completed(futures):
+            index = futures[future]
+            result = future.result()
+            with self._lock:
+                item = self._jobs[job_id]["items"][index]
+                item["state"] = result.state if result.state in ITEM_STATES else "failed"
+                item["message"] = result.message
+                if item["state"] in {"completed", "skipped", "unavailable"}:
+                    item["percent"] = 100.0
         with self._lock:
             self._jobs[job_id]["status"] = "completed"
 

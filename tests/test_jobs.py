@@ -1,9 +1,12 @@
 import time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import pytest
 
 import helper.jobs as jobs
+import helper.downloader as downloader
 from helper.downloader import ArtifactArchives, download_item
 
 
@@ -106,3 +109,65 @@ def test_transcript_unavailable_is_not_archived(monkeypatch, tmp_path):
 
     assert result.state == "unavailable"
     assert ArtifactArchives(tmp_path).contains("transcript", "abc") is False
+
+
+def test_overlapping_downloads_claim_same_artifact_once(monkeypatch, tmp_path):
+    calls = 0
+    calls_lock = threading.Lock()
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run(req, root, artifact, progress_cb):
+        nonlocal calls
+        with calls_lock:
+            calls += 1
+        started.set()
+        assert release.wait(1.0)
+
+    monkeypatch.setattr(downloader, "_run_yt_dlp", fake_run)
+    req = request("same")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(downloader.download_item, req, tmp_path, lambda update: None) for _ in range(2)]
+        assert started.wait(1.0)
+        time.sleep(0.05)
+        release.set()
+        results = [future.result(timeout=2.0) for future in futures]
+
+    assert calls == 1
+    assert sorted(result.state for result in results) == ["completed", "skipped"]
+
+
+def test_max_workers_is_global_across_overlapping_jobs(monkeypatch, tmp_path):
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    two_started = threading.Event()
+    release = threading.Event()
+
+    def fake_download(req, root, progress_cb):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active >= 2:
+                two_started.set()
+        assert release.wait(1.0)
+        with lock:
+            active -= 1
+        return jobs.ItemResult("completed")
+
+    monkeypatch.setattr(jobs, "download_item", fake_download)
+    manager = jobs.JobManager(max_workers=2)
+    first = manager.create_job([request("a"), request("b")], tmp_path)
+    second = manager.create_job([request("c"), request("d")], tmp_path)
+
+    assert two_started.wait(1.0)
+    time.sleep(0.05)
+    with lock:
+        observed_peak = peak
+    release.set()
+    wait_done(manager, first)
+    wait_done(manager, second)
+
+    assert observed_peak == 2

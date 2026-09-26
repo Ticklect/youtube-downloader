@@ -2,6 +2,7 @@ import * as api from "./api.js";
 import {
   canStartDownload,
   clearSelection,
+  normalizeCurrentJobId,
   normalizePreferences,
   selectAllVideos,
   summarizeProgress,
@@ -33,6 +34,7 @@ const els = {
 
 const state = {
   helperOnline: false,
+  dependencies: { yt_dlp: false, ffmpeg: false },
   videos: [],
   channelName: "",
   selectedIds: new Set(),
@@ -58,9 +60,10 @@ function formatDuration(seconds) {
 function refreshControls() {
   els.folderPath.textContent = state.folderPath || "No folder selected";
   els.selectionCount.textContent = String(state.selectedIds.size) + " selected";
-  els.startDownload.disabled = !canStartDownload(state);
+  els.startDownload.disabled = !canStartDownload({ ...state, mode: els.mode.value });
   els.startDownload.textContent = state.downloading ? "Downloading..." : "Download Selected";
   els.quality.disabled = !["video", "everything"].includes(els.mode.value);
+  els.loadChannel.disabled = !state.helperOnline || !state.dependencies.yt_dlp;
 }
 
 function renderVideos() {
@@ -127,6 +130,7 @@ async function savePreferences() {
     mode: els.mode.value,
     quality: els.quality.value,
     folderPath: state.folderPath,
+    currentJobId: state.currentJobId,
   });
 }
 
@@ -176,7 +180,7 @@ els.loadChannel.addEventListener("click", async () => {
     els.channelMessage.textContent = "";
     showError(error.message);
   } finally {
-    els.loadChannel.disabled = false;
+    refreshControls();
   }
 });
 
@@ -210,7 +214,7 @@ for (const select of [els.mode, els.quality]) {
 }
 
 els.startDownload.addEventListener("click", async () => {
-  if (!canStartDownload(state)) return;
+  if (!canStartDownload({ ...state, mode: els.mode.value })) return;
   showError();
   const videos = state.videos
     .filter((video) => state.selectedIds.has(video.video_id))
@@ -225,6 +229,7 @@ els.startDownload.addEventListener("click", async () => {
     refreshControls();
     const result = await api.createJob({ videos, mode: els.mode.value, quality: els.quality.value });
     state.currentJobId = result.job_id;
+    await savePreferences();
     await pollJob();
   } catch (error) {
     state.downloading = false;
@@ -240,6 +245,7 @@ els.retryFailed.addEventListener("click", async () => {
     refreshControls();
     const result = await api.retryJob(state.currentJobId);
     state.currentJobId = result.job_id;
+    await savePreferences();
     await pollJob();
   } catch (error) {
     state.downloading = false;
@@ -249,26 +255,48 @@ els.retryFailed.addEventListener("click", async () => {
 });
 
 async function initialize() {
-  const stored = await chrome.storage.local.get(["mode", "quality", "folderPath"]);
+  const stored = await chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"]);
   const prefs = normalizePreferences(stored);
   els.mode.value = prefs.mode;
   els.quality.value = prefs.quality;
   state.folderPath = typeof stored.folderPath === "string" ? stored.folderPath : "";
+  state.currentJobId = normalizeCurrentJobId(stored.currentJobId);
   refreshControls();
 
   try {
     const health = await api.health();
     state.helperOnline = true;
-    els.helperStatus.textContent = health.ok ? "Connected" : "Needs setup";
-    els.helperStatus.className = health.ok ? "status status-online" : "status status-offline";
+    state.dependencies = {
+      yt_dlp: Boolean(health.dependencies?.yt_dlp),
+      ffmpeg: Boolean(health.dependencies?.ffmpeg),
+    };
+    els.helperStatus.textContent = health.ok ? "Connected" : "Limited";
+    els.helperStatus.className = health.ok ? "status status-online" : "status status-limited";
     if (!health.ok && health.dependencies?.messages?.length) {
       showError(health.dependencies.messages.join(" "));
     }
     const folder = await api.getFolder();
     state.folderPath = folder.path || "";
+    if (state.currentJobId) {
+      try {
+        const job = await api.getJob(state.currentJobId);
+        renderJob(job);
+        state.downloading = job.status !== "completed";
+        if (state.downloading) state.pollTimer = setTimeout(pollJob, 250);
+      } catch (jobError) {
+        if (jobError.code === "job_not_found") {
+          state.currentJobId = null;
+          state.downloading = false;
+          showError("The previous job is no longer available because the helper was restarted.");
+        } else {
+          throw jobError;
+        }
+      }
+    }
     await savePreferences();
   } catch (error) {
     state.helperOnline = false;
+    state.dependencies = { yt_dlp: false, ffmpeg: false };
     els.helperStatus.textContent = "Offline";
     els.helperStatus.className = "status status-offline";
     showError(error.message);

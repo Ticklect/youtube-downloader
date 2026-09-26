@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from pathlib import Path
+import threading
 from typing import Callable
 
 from .settings import safe_child
@@ -17,6 +18,8 @@ except ImportError:
 ARTIFACT_KINDS = {"video", "audio", "transcript"}
 INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*]')
 WINDOWS_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+_ARTIFACT_LOCKS: dict[tuple[str, str, str], threading.Lock] = {}
+_ARTIFACT_LOCKS_GUARD = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -40,7 +43,7 @@ def sanitize_component(value: str) -> str:
     cleaned = re.sub(r"[\x00-\x1f]", "", cleaned).strip().rstrip(". ")
     if not cleaned:
         cleaned = "untitled"
-    if cleaned.upper() in WINDOWS_DEVICE_NAMES:
+    if cleaned.split(".", 1)[0].upper() in WINDOWS_DEVICE_NAMES:
         cleaned = f"_{cleaned}"
     return cleaned[:120].rstrip(". ") or "untitled"
 
@@ -59,10 +62,7 @@ def _video_format(quality: str) -> str:
     if quality not in {"360", "720", "1080"}:
         raise ValueError("Unsupported video quality.")
     height = int(quality)
-    return (
-        f"bestvideo*[height<={height}][ext=mp4]+bestaudio[ext=m4a]/"
-        f"bestvideo*[height<={height}]+bestaudio/best[height<={height}]/best"
-    )
+    return f"bestvideo*[height<={height}]+bestaudio/best[height<={height}]"
 
 
 def build_ydl_options(mode: str, quality: str, output_dir: Path) -> dict:
@@ -81,7 +81,7 @@ def build_ydl_options(mode: str, quality: str, output_dir: Path) -> dict:
 
     if mode in {"video", "everything"}:
         options["format"] = _video_format(quality)
-        options["merge_output_format"] = "mp4"
+        options["format_sort"] = ["res", "ext:mp4:m4a"]
         options["outtmpl"] = str(output_dir / "video.%(ext)s")
 
     if mode == "audio":
@@ -151,6 +151,16 @@ def _artifact_kinds(mode: str) -> list[str]:
     raise ValueError("Unsupported download mode.")
 
 
+def _artifact_lock(root: Path, kind: str, video_id: str) -> threading.Lock:
+    key = (str(Path(root).resolve()).casefold(), kind, video_id)
+    with _ARTIFACT_LOCKS_GUARD:
+        lock = _ARTIFACT_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _ARTIFACT_LOCKS[key] = lock
+        return lock
+
+
 def _progress_hook(progress_cb: Callable[[dict], None], artifact: str):
     def hook(data: dict) -> None:
         status = data.get("status")
@@ -196,19 +206,20 @@ def download_item(request: DownloadRequest, root: Path, progress_cb: Callable[[d
     root = Path(root).resolve()
     archives = ArtifactArchives(root)
     kinds = _artifact_kinds(request.mode)
-    pending = [kind for kind in kinds if not archives.contains(kind, request.video_id)]
-    if not pending:
-        return ItemResult("skipped", "Requested output already exists in the archive.")
-
     transcript_unavailable = False
+    produced_artifact = False
     try:
-        for artifact in pending:
-            _run_yt_dlp(request, root, artifact, progress_cb)
-            if artifact == "transcript":
-                if not _finalize_transcript(request, root):
-                    transcript_unavailable = True
+        for artifact in kinds:
+            with _artifact_lock(root, artifact, request.video_id):
+                if archives.contains(artifact, request.video_id):
                     continue
-            archives.mark_complete(artifact, request.video_id)
+                _run_yt_dlp(request, root, artifact, progress_cb)
+                if artifact == "transcript":
+                    if not _finalize_transcript(request, root):
+                        transcript_unavailable = True
+                        continue
+                archives.mark_complete(artifact, request.video_id)
+                produced_artifact = True
     except Exception as exc:
         return ItemResult("failed", str(exc))
 
@@ -216,4 +227,6 @@ def download_item(request: DownloadRequest, root: Path, progress_cb: Callable[[d
         return ItemResult("unavailable", "No captions were available for this video.")
     if transcript_unavailable:
         return ItemResult("completed", "Media downloaded; transcript was unavailable.")
+    if not produced_artifact:
+        return ItemResult("skipped", "Requested output already exists in the archive.")
     return ItemResult("completed")

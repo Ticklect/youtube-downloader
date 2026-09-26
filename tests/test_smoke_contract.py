@@ -50,3 +50,12 @@ def test_readme_documents_complete_setup_and_usage_path():
         "helper/requirements.txt",
     ]:
         assert (ROOT / relative).exists()
+
+
+def test_setup_and_popup_preserve_dependency_and_job_lifecycle_contracts():
+    setup = (ROOT / "scripts" / "setup.ps1").read_text(encoding="utf-8")
+    popup = (ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
+
+    assert "Setup incomplete" in setup
+    assert "currentJobId" in popup
+    assert 'chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"])' in popup
