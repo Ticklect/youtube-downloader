@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Channel Downloader</title>
+  <link rel="stylesheet" href="downloader.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="page-header">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">↓</div>
+        <div>
+          <span class="eyebrow">YouTube utility</span>
+          <h1>Channel Downloader</h1>
+          <p>Paste a channel, choose the videos you want, and download only those.</p>
+        </div>
+      </div>
+      <span id="helperStatus" class="status status-offline">Offline</span>
+    </header>
+
+    <section class="panel source-panel">
+      <div class="source-copy">
+        <label for="channelUrl">YouTube channel</label>
+        <p>Paste the public channel URL you want to browse.</p>
+      </div>
+      <div class="input-row">
+        <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off" spellcheck="false">
+        <button id="loadChannel" class="primary">Load Videos</button>
+      </div>
+      <p id="channelMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <p id="errorMessage" class="error hidden" role="alert"></p>
+
+    <div class="content-grid">
+      <section id="videoSection" class="panel video-panel hidden">
+        <div class="section-heading video-heading">
+          <div>
+            <span class="eyebrow">Videos</span>
+            <h2 id="channelName">Channel</h2>
+          </div>
+          <span id="selectionCount" class="selection-count">0 selected</span>
+        </div>
+
+        <div class="video-toolbar">
+          <span class="toolbar-note">Choose exactly what gets downloaded.</span>
+          <div class="toolbar-actions">
+            <button id="selectAll" class="text-button">Select all</button>
+            <button id="clearAll" class="text-button">Clear</button>
+          </div>
+        </div>
+        <div id="videoList" class="video-list"></div>
+      </section>
+
+      <aside class="control-stack">
+        <section class="panel control-panel">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Download location</span>
+              <h2>Save to</h2>
+            </div>
+          </div>
+          <div class="folder-box">
+            <strong id="folderPath">No folder selected</strong>
+            <button id="chooseFolder" class="secondary">Choose Folder</button>
+          </div>
+        </section>
+
+        <section class="panel control-panel">
+          <span class="eyebrow">Format</span>
+          <div class="option-grid">
+            <label>
+              <span>Output</span>
+              <select id="mode">
+                <option value="video">Video</option>
+                <option value="audio">Audio (MP3)</option>
+                <option value="transcript">Transcript</option>
+                <option value="everything">Everything</option>
+              </select>
+            </label>
+            <label>
+              <span>Video quality</span>
+              <select id="quality">
+                <option value="360">360p</option>
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+                <option value="best">Best available</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="download-card">
+          <div>
+            <span class="eyebrow">Ready when you are</span>
+            <p>Only selected videos are sent to the local helper.</p>
+          </div>
+          <button id="startDownload" class="primary large" disabled>Download Selected</button>
+          <button id="retryFailed" class="secondary large hidden">Retry Failed</button>
+        </section>
+      </aside>
+    </div>
+
+    <section id="progressPanel" class="panel progress-panel hidden">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Current job</span>
+          <h2>Download progress</h2>
+        </div>
+        <span id="progressSummary" class="selection-count"></span>
+      </div>
+      <div id="jobItems" class="job-list"></div>
+    </section>
+
+    <footer>Use only for content you own or have permission to download.</footer>
+  </main>
+  <script type="module" src="downloader.js"></script>
+</body>
+</html>
