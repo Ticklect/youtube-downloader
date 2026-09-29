@@ -55,6 +55,7 @@ const state = {
   videos: [],
   channelName: "",
   selectedIds: new Set(),
+  channelLoading: false,
   folderPath: "",
   downloading: false,
   currentJobId: null,
@@ -135,7 +136,7 @@ function refreshControls() {
       ? `Download ${selectedCount} video${selectedCount === 1 ? "" : "s"}`
       : "Download selected";
   els.quality.disabled = !["video", "everything"].includes(els.mode.value);
-  els.loadChannel.disabled = Boolean(state.helperTransition) || !helperCanStart || (state.helperOnline && !state.dependencies.yt_dlp);
+  els.loadChannel.disabled = state.channelLoading || Boolean(state.helperTransition) || !helperCanStart || (state.helperOnline && !state.dependencies.yt_dlp);
   els.chooseFolder.disabled = Boolean(state.helperTransition) || !helperCanStart;
   els.autoStartHelper.checked = state.autoStartHelper;
   els.helperToggle.disabled = Boolean(state.helperTransition) || state.downloading || !state.helperControlAvailable;
@@ -351,10 +352,19 @@ els.loadChannel.addEventListener("click", async () => {
     return;
   }
 
-  els.loadChannel.disabled = true;
+  state.channelLoading = true;
+  state.channelUrl = url;
+  state.channelName = "";
+  state.videos = [];
+  state.selectedIds = clearSelection();
+  els.channelName.textContent = "Channel";
+  els.videoList.textContent = "";
+  els.videoSection.classList.add("hidden");
   els.channelMessage.textContent = "Loading channel…";
+  refreshControls();
 
   try {
+    await savePreferences();
     if (!(await requireHelper("load"))) {
       els.channelMessage.textContent = "";
       return;
@@ -374,6 +384,7 @@ els.loadChannel.addEventListener("click", async () => {
     els.channelMessage.textContent = "";
     showError(error.message);
   } finally {
+    state.channelLoading = false;
     refreshControls();
   }
 });

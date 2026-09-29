@@ -64,3 +64,23 @@ test("auto-start checkbox changes persist without clearing downloader draft", as
     assert.match(source, new RegExp(`${field}:`), `savePreferences must keep ${field}`);
   }
 });
+
+test("loading a replacement channel clears stale videos before requesting the new channel", async () => {
+  const source = await readFile(popupJs, "utf8");
+  const handler = indexOrFail(
+    source,
+    /loadChannel\.addEventListener\(["']click["'],\s*async\s*\(\)\s*=>\s*\{/,
+    "missing load-channel handler",
+  );
+  const body = source.slice(handler);
+  const clearVideos = indexOrFail(body, /state\.videos\s*=\s*\[\]/, "replacement load must clear stale videos");
+  const clearSelection = indexOrFail(body, /state\.selectedIds\s*=\s*clearSelection\(\)/, "replacement load must clear stale selection");
+  const hideOldResults = indexOrFail(body, /videoSection\.classList\.add\(["']hidden["']\)/, "replacement load must hide old results");
+  const persistClearedDraft = indexOrFail(body, /await\s+savePreferences\(\)/, "replacement load must persist the cleared draft");
+  const loadRequest = indexOrFail(body, /await\s+api\.loadChannel\(url\)/, "missing channel request");
+
+  assert.ok(clearVideos < loadRequest);
+  assert.ok(clearSelection < loadRequest);
+  assert.ok(hideOldResults < loadRequest);
+  assert.ok(persistClearedDraft < loadRequest);
+});
