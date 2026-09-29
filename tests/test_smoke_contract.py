@@ -30,6 +30,11 @@ def test_readme_documents_complete_setup_and_usage_path():
         "chrome://extensions",
         "Load unpacked",
         "scripts/setup.ps1",
+        "scripts/uninstall-helper-control.ps1",
+        "Turn On",
+        "Turn Off",
+        "Auto-start when needed",
+        "manual mode",
         "scripts/start-helper.ps1",
         "Choose Folder",
         "360p",
@@ -42,6 +47,10 @@ def test_readme_documents_complete_setup_and_usage_path():
     ]
     for text in required:
         assert text in readme
+
+    troubleshooting_index = readme.index("## Troubleshooting")
+    assert readme.index("scripts/start-helper.ps1") > troubleshooting_index
+    assert "Keep that helper running while you use the extension." not in readme
 
     for relative in [
         "extension/manifest.json",
