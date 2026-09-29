@@ -11,6 +11,8 @@ test("manifest exposes only the popup downloader and no tab-navigation permissio
 
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.action?.default_popup, "popup.html");
+  assert.equal(typeof manifest.key, "string");
+  assert.ok(manifest.key.length > 40);
   assert.ok(manifest.permissions?.includes("storage"));
   assert.equal(manifest.permissions?.includes("tabs"), false);
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1:17865/*"]);

@@ -80,7 +80,11 @@ def create_app(
     @app.get("/health")
     def health():
         status = dependency_checker()
-        return jsonify({"ok": status.yt_dlp and status.ffmpeg, "dependencies": asdict(status)})
+        return jsonify({
+            "service": "youtube-channel-downloader",
+            "ok": status.yt_dlp and status.ffmpeg,
+            "dependencies": asdict(status),
+        })
 
     @app.post("/channel")
     def channel_route():

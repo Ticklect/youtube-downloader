@@ -43,8 +43,10 @@ def test_health_allows_originless_get_but_rejects_web_origin(tmp_path):
     response = client.get("/health", headers={"Origin": ORIGIN})
 
     assert originless.status_code == 200
+    assert originless.get_json()["service"] == "youtube-channel-downloader"
     assert originless.get_json()["dependencies"] == {"yt_dlp": True, "ffmpeg": False, "messages": ["FFmpeg missing"]}
     assert response.status_code == 200
+    assert response.get_json()["service"] == "youtube-channel-downloader"
     assert response.get_json()["dependencies"] == {"yt_dlp": True, "ffmpeg": False, "messages": ["FFmpeg missing"]}
 
 
