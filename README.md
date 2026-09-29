@@ -71,12 +71,12 @@ Chosen Folder/
       transcript.vtt
       transcript.txt
   .youtube-channel-downloader/
-    archive-video.txt
+    archive-video-h264.txt
     archive-audio.txt
     archive-transcript.txt
 ```
 
-The exact video container can differ when YouTube does not provide a compatible MP4 combination. The downloader keeps separate duplicate records for video, audio, and transcript outputs, so downloading a video does not prevent you from downloading its MP3 or transcript later.
+Video downloads target H.264 video with AAC audio in an MP4 container for broad Windows playback compatibility. The downloader keeps separate duplicate records for video, audio, and transcript outputs, so downloading a video does not prevent you from downloading its MP3 or transcript later.
 
 ## Troubleshooting
 

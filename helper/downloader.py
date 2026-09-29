@@ -58,11 +58,17 @@ def build_video_dir(root: Path, channel: str, title: str, video_id: str) -> Path
 
 def _video_format(quality: str) -> str:
     if quality == "best":
-        return "bestvideo*+bestaudio/best"
+        return (
+            "bestvideo*[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+            "best[ext=mp4][vcodec^=avc1][acodec^=mp4a]"
+        )
     if quality not in {"360", "720", "1080"}:
         raise ValueError("Unsupported video quality.")
     height = int(quality)
-    return f"bestvideo*[height<={height}]+bestaudio/best[height<={height}]"
+    return (
+        f"bestvideo*[vcodec^=avc1][height<={height}]+bestaudio[acodec^=mp4a]/"
+        f"best[ext=mp4][vcodec^=avc1][acodec^=mp4a][height<={height}]"
+    )
 
 
 def build_ydl_options(mode: str, quality: str, output_dir: Path) -> dict:
@@ -81,7 +87,7 @@ def build_ydl_options(mode: str, quality: str, output_dir: Path) -> dict:
 
     if mode in {"video", "everything"}:
         options["format"] = _video_format(quality)
-        options["format_sort"] = ["res", "ext:mp4:m4a"]
+        options["merge_output_format"] = "mp4"
         options["outtmpl"] = str(output_dir / "video.%(ext)s")
 
     if mode == "audio":
@@ -124,6 +130,8 @@ class ArtifactArchives:
     def _path(self, kind: str) -> Path:
         if kind not in ARTIFACT_KINDS:
             raise ValueError("Unknown artifact kind.")
+        if kind == "video":
+            return safe_child(self.meta_dir, "archive-video-h264.txt")
         return safe_child(self.meta_dir, f"archive-{kind}.txt")
 
     def contains(self, kind: str, video_id: str) -> bool:

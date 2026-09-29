@@ -28,11 +28,13 @@ def test_video_options_cap_requested_height(tmp_path, quality, height):
     assert str(options["outtmpl"]).endswith("video.%(ext)s")
 
 
-def test_capped_video_format_never_falls_back_above_cap_and_does_not_force_mp4(tmp_path):
+def test_capped_video_format_keeps_height_cap_and_forces_windows_compatible_mp4(tmp_path):
     options = build_ydl_options("video", "720", tmp_path)
-    assert options["format"] == "bestvideo*[height<=720]+bestaudio/best[height<=720]"
-    assert options["format_sort"] == ["res", "ext:mp4:m4a"]
-    assert "merge_output_format" not in options
+    assert options["format"] == (
+        "bestvideo*[vcodec^=avc1][height<=720]+bestaudio[acodec^=mp4a]/"
+        "best[ext=mp4][vcodec^=avc1][acodec^=mp4a][height<=720]"
+    )
+    assert options["merge_output_format"] == "mp4"
 
 
 def test_best_video_options_have_no_height_cap(tmp_path):
@@ -69,6 +71,16 @@ def test_artifact_archives_are_independent(tmp_path):
     assert archives.contains("video", "abc123") is True
     assert archives.contains("audio", "abc123") is False
     assert archives.contains("transcript", "abc123") is False
+
+
+def test_video_archive_does_not_reuse_pre_h264_completion_marker(tmp_path):
+    legacy = tmp_path / ".youtube-channel-downloader" / "archive-video.txt"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("abc123\n", encoding="utf-8")
+
+    archives = ArtifactArchives(tmp_path)
+
+    assert archives.contains("video", "abc123") is False
 
 
 def test_archive_rejects_unknown_kind(tmp_path):
