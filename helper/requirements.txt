@@ -1,3 +1,4 @@
 Flask>=3.0,<4
 yt-dlp>=2025.1.1
 pytest>=8,<10
+psutil>=6,<8
