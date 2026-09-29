@@ -27,5 +27,10 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Host "FFmpeg found."
 }
 
-Write-Host "Setup complete. Start the helper with:"
-Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\start-helper.ps1"
+$NativeInstaller = Join-Path $PSScriptRoot "install-native-host.ps1"
+& powershell -NoProfile -ExecutionPolicy Bypass -File $NativeInstaller
+if ($LASTEXITCODE -ne 0) {
+    throw "Setup incomplete: native helper control installation failed."
+}
+
+Write-Host "Setup complete. The browser extension can now start and stop the helper."

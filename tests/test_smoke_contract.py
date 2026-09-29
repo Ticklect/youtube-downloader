@@ -47,6 +47,8 @@ def test_readme_documents_complete_setup_and_usage_path():
         "extension/manifest.json",
         "scripts/setup.ps1",
         "scripts/start-helper.ps1",
+        "scripts/install-native-host.ps1",
+        "scripts/uninstall-helper-control.ps1",
         "helper/requirements.txt",
     ]:
         assert (ROOT / relative).exists()
