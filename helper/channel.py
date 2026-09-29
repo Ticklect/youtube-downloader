@@ -9,6 +9,9 @@ except ImportError:  # dependency health endpoint reports this more cleanly
     YoutubeDL = None  # type: ignore[assignment]
 
 
+CHANNEL_VIDEO_LIMIT = 200
+
+
 @dataclass(frozen=True)
 class VideoInfo:
     video_id: str
@@ -79,6 +82,7 @@ def load_channel(url: str) -> ChannelResult:
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": True,
+        "playlistend": CHANNEL_VIDEO_LIMIT,
     }
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(normalized, download=False) or {}

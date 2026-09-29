@@ -52,6 +52,25 @@ class FakeYDL:
         return self.payload
 
 
+def test_load_channel_caps_playlist_enumeration_for_large_channels(monkeypatch):
+    captured = {}
+
+    class CapturingYDL(FakeYDL):
+        def __init__(self, options, payload):
+            super().__init__(options, payload)
+            captured.update(options)
+
+    monkeypatch.setattr(
+        channel,
+        "YoutubeDL",
+        lambda options: CapturingYDL(options, {"channel": "Large Creator", "entries": []}),
+    )
+
+    channel.load_channel("https://www.youtube.com/@creator")
+
+    assert captured["playlistend"] == 200
+
+
 def test_load_channel_returns_normalized_video_info_and_skips_bad_entries(monkeypatch):
     payload = {
         "channel": "Test Creator",
