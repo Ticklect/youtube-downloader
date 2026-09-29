@@ -12,12 +12,13 @@ class FakePopen:
 
 
 class FakeProcess:
-    def __init__(self, pid, *, create_time=10.0, exe="", cmdline=None, running=True):
+    def __init__(self, pid, *, create_time=10.0, exe="", cmdline=None, running=True, children=None):
         self.pid = pid
         self._create_time = create_time
         self._exe = exe
         self._cmdline = list(cmdline or [])
         self._running = running
+        self._children = list(children or [])
         self.terminated = False
         self.killed = False
 
@@ -29,6 +30,8 @@ class FakeProcess:
         return list(self._cmdline)
     def is_running(self):
         return self._running
+    def children(self, recursive=False):
+        return list(self._children)
     def terminate(self):
         self.terminated = True
         self._running = False
@@ -198,6 +201,63 @@ def test_stop_terminates_only_verified_owned_helper(tmp_path):
     assert result == {"ok": True, "healthy": False, "owned": False}
     assert process.terminated is True
     assert not controller.state_path.exists()
+
+
+def test_stop_terminates_verified_helper_descendant_before_launcher(tmp_path):
+    repo, python = make_repo(tmp_path)
+    config = tmp_path / "control"
+    child_python = tmp_path / "Python312" / "python.exe"
+    child = FakeProcess(
+        5151,
+        create_time=10.1,
+        exe=str(child_python),
+        cmdline=[str(child_python), "-m", "helper.app"],
+    )
+    launcher = FakeProcess(
+        4242,
+        create_time=10.0,
+        exe=str(python),
+        cmdline=[str(python), "-m", "helper.app"],
+        children=[child],
+    )
+    write_state(config, launcher)
+    clock = iter([0.0, 4.0])
+    controller = HelperController(
+        repo,
+        config,
+        health_probe=lambda: child.is_running(),
+        process_factory=lambda pid: launcher,
+        sleep=lambda _: None,
+        monotonic=lambda: next(clock, 4.0),
+    )
+
+    result = controller.stop()
+
+    assert child.terminated is True
+    assert launcher.terminated is True
+    assert result == {"ok": True, "healthy": False, "owned": False}
+    assert not controller.state_path.exists()
+
+
+def test_stop_never_reports_success_while_expected_helper_is_still_healthy(tmp_path):
+    repo, python = make_repo(tmp_path)
+    config = tmp_path / "control"
+    process = matching_process(python)
+    write_state(config, process)
+    clock = iter([0.0, 4.0])
+    controller = HelperController(
+        repo,
+        config,
+        health_probe=lambda: True,
+        process_factory=lambda pid: process,
+        sleep=lambda _: None,
+        monotonic=lambda: next(clock, 4.0),
+    )
+
+    with pytest.raises(ControllerError, match="still running") as exc_info:
+        controller.stop()
+
+    assert exc_info.value.code == "stop_failed"
 
 
 def test_duplicate_start_waits_for_existing_owned_process_instead_of_spawning(tmp_path):

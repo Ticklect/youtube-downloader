@@ -5,6 +5,7 @@ import {
   HELPER_HOST_NAME,
   HelperControlError,
   ensureHelperReady,
+  requireHelperStopped,
   sendControlCommand,
   waitForHelper,
 } from "../../extension/helper-control.js";
@@ -59,6 +60,20 @@ test("sendControlCommand maps structured native errors", async () => {
   await assert.rejects(
     () => sendControlCommand(chromeApi, "stop"),
     (error) => error.code === "ownership_unverified" && /nothing was stopped/.test(error.message),
+  );
+});
+
+
+test("requireHelperStopped rejects any successful stop response that is still healthy", () => {
+  assert.deepEqual(
+    requireHelperStopped({ ok: true, healthy: false, owned: false }),
+    { ok: true, healthy: false, owned: false },
+  );
+  assert.throws(
+    () => requireHelperStopped({ ok: true, healthy: true, owned: false }),
+    (error) => error instanceof HelperControlError
+      && error.code === "stop_failed"
+      && /still running/i.test(error.message),
   );
 });
 

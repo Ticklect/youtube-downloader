@@ -58,6 +58,13 @@ export function sendControlCommand(chromeApi, command) {
   });
 }
 
+export function requireHelperStopped(response) {
+  if (response?.healthy !== false) {
+    throw new HelperControlError("Helper is still running after the stop request.", "stop_failed");
+  }
+  return response;
+}
+
 function isExpectedHealth(health) {
   return health?.service === HELPER_SERVICE;
 }

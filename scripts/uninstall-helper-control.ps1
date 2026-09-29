@@ -3,9 +3,16 @@ $Root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $NativeRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "native_host"))
 $NativePrefix = $NativeRoot.TrimEnd('\') + '\'
 $RegistryPath = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.ycd.helper_control"
+$ManifestPath = [System.IO.Path]::GetFullPath((Join-Path $NativeRoot "install\com.ycd.helper_control.json"))
 
 if (Test-Path -LiteralPath $RegistryPath) {
-    Remove-Item -LiteralPath $RegistryPath -Recurse -Force
+    $RegisteredManifest = Get-ItemPropertyValue -LiteralPath $RegistryPath -Name '(default)'
+    $RegisteredManifestPath = [System.IO.Path]::GetFullPath([string]$RegisteredManifest)
+    if ([string]::Equals($RegisteredManifestPath, $ManifestPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $RegistryPath -Recurse -Force
+    } else {
+        Write-Host "Native helper control registration belongs to another checkout; leaving it unchanged."
+    }
 }
 
 foreach ($name in @("install", "dist", "build")) {

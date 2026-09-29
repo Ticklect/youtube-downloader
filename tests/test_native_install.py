@@ -72,6 +72,10 @@ def test_uninstaller_is_scoped_to_owned_registration_and_native_host_artifacts()
     source = UNINSTALLER.read_text(encoding="utf-8")
     assert "HKCU:\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.ycd.helper_control" in source
     assert "native_host" in source
+    assert "Get-ItemPropertyValue" in source
+    assert "RegisteredManifest" in source
+    assert "ManifestPath" in source
+    assert "OrdinalIgnoreCase" in source
     assert ".venv" not in source
     assert "HKLM:" not in source
     assert "Remove-Item" in source

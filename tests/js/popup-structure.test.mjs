@@ -112,6 +112,33 @@ test("popup uses a flat utility visual system instead of decorative AI-dashboard
 });
 
 
+function relativeLuminance(hex) {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? value.split("").map((part) => part + part).join("") : value;
+  const channels = [0, 2, 4].map((offset) => Number.parseInt(full.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((channel) => (
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  ));
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(first, second) {
+  const [bright, dark] = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
+  return (bright + 0.05) / (dark + 0.05);
+}
+
+test("red theme primary button text meets normal-text contrast", async () => {
+  const css = await readFile(popupCss, "utf8");
+  const redTheme = css.match(/html\[data-theme=["']red["']\]\s*\{([^}]*)\}/i)?.[1] || "";
+  const accent = redTheme.match(/--accent\s*:\s*(#[0-9a-f]{3,6})/i)?.[1];
+  const ink = redTheme.match(/--accent-ink\s*:\s*(#[0-9a-f]{3,6})/i)?.[1];
+
+  assert.ok(accent, "red theme must define --accent as a hex color");
+  assert.ok(ink, "red theme must define --accent-ink as a hex color");
+  assert.ok(contrastRatio(accent, ink) >= 4.5, `red primary contrast is ${contrastRatio(accent, ink).toFixed(2)}:1`);
+});
+
+
 test("popup persists and restores the selected appearance theme", async () => {
   const source = await readFile(popupJs, "utf8");
 

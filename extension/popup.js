@@ -1,6 +1,6 @@
 import * as api from "./api.js";
 import { getJobOrRecover, retryJobOrRecover } from "./job-lifecycle.js";
-import { ensureHelperReady, sendControlCommand, waitForHelper } from "./helper-control.js";
+import { ensureHelperReady, requireHelperStopped, sendControlCommand, waitForHelper } from "./helper-control.js";
 import {
   canRetryFailed,
   canStartDownload,
@@ -445,7 +445,7 @@ els.helperToggle.addEventListener("click", async () => {
     setHelperStatus("stopping");
     refreshControls();
     try {
-      await sendControlCommand(chrome, "stop");
+      requireHelperStopped(await sendControlCommand(chrome, "stop"));
       state.helperOwned = false;
       state.helperTransition = null;
       markHelperOff();

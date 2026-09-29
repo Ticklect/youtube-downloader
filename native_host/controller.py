@@ -161,7 +161,25 @@ class HelperController:
                 return False
             self.sleep(0.1)
 
-    def _terminate_verified(self, process) -> None:
+    @staticmethod
+    def _is_helper_process(process) -> bool:
+        try:
+            if hasattr(process, "is_running") and not process.is_running():
+                return False
+            cmdline = list(process.cmdline())
+        except Exception:
+            return False
+        return len(cmdline) >= 3 and cmdline[-2:] == ["-m", "helper.app"]
+
+    def _owned_helper_descendants(self, process) -> list:
+        try:
+            children = list(process.children(recursive=True))
+        except Exception:
+            return []
+        return [child for child in children if self._is_helper_process(child)]
+
+    @staticmethod
+    def _terminate_process(process) -> None:
         process.terminate()
         try:
             process.wait(timeout=4)
@@ -169,6 +187,11 @@ class HelperController:
             if hasattr(process, "is_running") and process.is_running():
                 process.kill()
                 process.wait(timeout=2)
+
+    def _terminate_verified(self, process) -> None:
+        for child in reversed(self._owned_helper_descendants(process)):
+            self._terminate_process(child)
+        self._terminate_process(process)
 
     def status(self) -> dict:
         with self._exclusive_lock():
@@ -235,4 +258,7 @@ class HelperController:
             deadline = self.monotonic() + 3.0
             while self.health_probe() and self.monotonic() < deadline:
                 self.sleep(0.1)
-            return {"ok": True, "healthy": bool(self.health_probe()), "owned": False}
+            healthy = bool(self.health_probe())
+            if healthy:
+                raise ControllerError("Helper is still running after the owned process was stopped.", "stop_failed")
+            return {"ok": True, "healthy": False, "owned": False}

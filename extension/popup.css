@@ -14,10 +14,10 @@
   --success: #5ad37a;
   --warning: #e7bd58;
   --danger: #ff6b75;
-  --accent: #ff0033;
-  --accent-hover: #e5002e;
+  --accent: #d9002b;
+  --accent-hover: #c40027;
   --accent-ink: #fff;
-  --selection: rgba(255, 0, 51, .08);
+  --selection: rgba(217, 0, 43, .08);
   background: var(--bg);
   color: var(--text);
 }
@@ -30,10 +30,10 @@ html[data-theme="mono"] {
 }
 
 html[data-theme="red"] {
-  --accent: #ff0033;
-  --accent-hover: #e5002e;
+  --accent: #d9002b;
+  --accent-hover: #c40027;
   --accent-ink: #fff;
-  --selection: rgba(255, 0, 51, .08);
+  --selection: rgba(217, 0, 43, .08);
 }
 
 * { box-sizing: border-box; }

@@ -39,6 +39,14 @@ test("manual turn off refuses while a download is active before native stop", as
   assert.match(body.slice(guard, stop), /finish|download/i);
 });
 
+test("manual turn off validates the native stop result before rendering helper off", async () => {
+  const source = await readFile(popupJs, "utf8");
+  assert.match(source, /requireHelperStopped\(await sendControlCommand\(chrome,\s*["']stop["']\)\)/);
+  const validation = indexOrFail(source, /requireHelperStopped\(await sendControlCommand\(chrome,\s*["']stop["']\)\)/, "missing stop validation");
+  const markOff = indexOrFail(source.slice(validation), /markHelperOff\(\)/, "missing off-state rendering after validation");
+  assert.ok(markOff > 0);
+});
+
 test("offline auto-start mode leaves helper actions reachable", async () => {
   const source = await readFile(popupJs, "utf8");
   assert.match(source, /state\.autoStartHelper/);
