@@ -1,6 +1,7 @@
 import * as api from "./api.js";
 import { getJobOrRecover, retryJobOrRecover } from "./job-lifecycle.js";
 import {
+  canRetryFailed,
   canStartDownload,
   clearSelection,
   normalizeCurrentJobId,
@@ -148,7 +149,7 @@ function renderJob(job) {
     els.jobItems.append(row);
   }
 
-  els.retryFailed.classList.toggle("hidden", summary.failed === 0 || state.downloading);
+  els.retryFailed.classList.toggle("hidden", !canRetryFailed(job, state.downloading));
 }
 
 async function savePreferences() {

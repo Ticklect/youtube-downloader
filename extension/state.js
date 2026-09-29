@@ -16,6 +16,11 @@ export function canStartDownload({ folderPath, selectedIds, helperOnline, downlo
   return Boolean(dependencies?.ffmpeg);
 }
 
+export function canRetryFailed(job, downloading) {
+  if (downloading || job?.status !== "completed") return false;
+  return summarizeProgress(job).failed > 0;
+}
+
 export function normalizeCurrentJobId(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();

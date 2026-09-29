@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  canRetryFailed,
   canStartDownload,
   clearSelection,
   normalizeCurrentJobId,
@@ -71,4 +72,20 @@ test("progress summary covers every terminal and active state", () => {
     ],
   });
   assert.deepEqual(summary, { total: 6, done: 4, queued: 1, active: 1, completed: 1, skipped: 1, unavailable: 1, failed: 1 });
+});
+
+test("retry failed is only available after the job has completed", () => {
+  const runningWithFailure = {
+    status: "running",
+    items: [{ state: "failed" }, { state: "active" }],
+  };
+  const completedWithFailure = {
+    status: "completed",
+    items: [{ state: "failed" }, { state: "completed" }],
+  };
+
+  assert.equal(canRetryFailed(runningWithFailure, false), false);
+  assert.equal(canRetryFailed(completedWithFailure, true), false);
+  assert.equal(canRetryFailed(completedWithFailure, false), true);
+  assert.equal(canRetryFailed({ status: "completed", items: [{ state: "completed" }] }, false), false);
 });
