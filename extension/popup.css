@@ -25,8 +25,17 @@ h2 { margin: 2px 0 0; font-size: 14px; letter-spacing: -.015em; }
 .status-online { background: #12251b; border-color: #255d3a; color: #8ce3ad; }
 .status-limited { background: #2a2415; border-color: #67551f; color: #f1d477; }
 .status-offline { background: #271618; border-color: #653139; color: #f39aa5; }
+.status-starting, .status-stopping { background: #182034; border-color: #3b4c82; color: #aeb9ff; }
+.status-control-missing { background: #2b2114; border-color: #6c5122; color: #efce7a; }
 
 .panel, .setting-card { border: 1px solid #252933; border-radius: 12px; background: #14161b; }
+.helper-control { margin-bottom: 9px; padding: 10px 12px; }
+.helper-control-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.helper-control-row strong { display: block; margin-top: 2px; color: #e1e4ea; font-size: 10px; }
+.helper-control-row button { min-width: 78px; }
+.auto-start-row { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: #aeb4bf; font-size: 9px; cursor: pointer; }
+.auto-start-row input { width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; accent-color: #6e7dff; }
+.helper-control .message { margin-bottom: 0; }
 .source-card { padding: 12px; margin-bottom: 9px; }
 .source-card > label { display: block; margin-bottom: 6px; color: #d2d6de; font-size: 10px; font-weight: 750; }
 .input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }

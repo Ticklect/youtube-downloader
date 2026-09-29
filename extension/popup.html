@@ -20,6 +20,21 @@
       <span id="helperStatus" class="status status-offline">Offline</span>
     </header>
 
+    <section id="helperControl" class="panel helper-control">
+      <div class="helper-control-row">
+        <div>
+          <span class="eyebrow">Local helper</span>
+          <strong>Background downloader service</strong>
+        </div>
+        <button id="helperToggle" class="secondary">Turn On</button>
+      </div>
+      <label class="auto-start-row">
+        <input id="autoStartHelper" type="checkbox" checked>
+        <span>Auto-start when needed</span>
+      </label>
+      <p id="helperControlMessage" class="message" aria-live="polite">Checking helper control…</p>
+    </section>
+
     <section class="panel source-card">
       <label for="channelUrl">YouTube channel</label>
       <div class="input-row">

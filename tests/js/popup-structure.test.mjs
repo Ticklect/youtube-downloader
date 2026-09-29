@@ -12,6 +12,10 @@ const navigationJs = new URL("../../extension/navigation.js", import.meta.url);
 
 const requiredIds = [
   "helperStatus",
+  "helperControl",
+  "helperToggle",
+  "autoStartHelper",
+  "helperControlMessage",
   "channelUrl",
   "loadChannel",
   "channelMessage",
@@ -89,6 +93,19 @@ test("popup persists the loaded channel and selection before opening the native 
   assert.match(source, /await\s+savePreferences\(\);\s*\n\s*const\s+result\s*=\s*await\s+api\.pickFolder\(\)/);
   assert.match(source, /chrome\.storage\.local\.get\(\[[^\]]*"channelUrl"[^\]]*"videos"[^\]]*"selectedIds"[^\]]*\]\)/s);
   assert.match(source, /normalizeChannelDraft\(stored\)/);
+});
+
+test("popup exposes manual helper control and auto-start preference", async () => {
+  const html = await readFile(popupHtml, "utf8");
+  const source = await readFile(popupJs, "utf8");
+
+  assert.match(html, /Auto-start when needed/);
+  assert.match(html, /id=["']helperToggle["']/);
+  assert.match(html, /id=["']autoStartHelper["']/);
+  assert.match(source, /autoStartHelper:\s*state\.autoStartHelper/);
+  assert.match(source, /"autoStartHelper"/);
+  assert.match(source, /sendControlCommand\(chrome,\s*["']start["']\)/);
+  assert.match(source, /sendControlCommand\(chrome,\s*["']stop["']\)/);
 });
 
 

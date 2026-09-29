@@ -1,5 +1,6 @@
 import * as api from "./api.js";
 import { getJobOrRecover, retryJobOrRecover } from "./job-lifecycle.js";
+import { ensureHelperReady, sendControlCommand, waitForHelper } from "./helper-control.js";
 import {
   canRetryFailed,
   canStartDownload,
@@ -14,6 +15,10 @@ import {
 const $ = (id) => document.getElementById(id);
 const els = {
   helperStatus: $("helperStatus"),
+  helperControl: $("helperControl"),
+  helperToggle: $("helperToggle"),
+  autoStartHelper: $("autoStartHelper"),
+  helperControlMessage: $("helperControlMessage"),
   channelUrl: $("channelUrl"),
   loadChannel: $("loadChannel"),
   channelMessage: $("channelMessage"),
@@ -37,6 +42,10 @@ const els = {
 
 const state = {
   helperOnline: false,
+  helperControlAvailable: true,
+  helperOwned: false,
+  helperTransition: null,
+  autoStartHelper: true,
   dependencies: { yt_dlp: false, ffmpeg: false },
   channelUrl: "",
   videos: [],
@@ -55,9 +64,34 @@ function showError(message) {
 }
 
 function setHelperStatus(kind) {
-  const label = kind === "online" ? "Connected" : kind === "limited" ? "Limited" : "Offline";
+  const labels = {
+    online: "Connected",
+    limited: "Limited",
+    offline: "Helper Off",
+    starting: "Starting…",
+    stopping: "Stopping…",
+    "control-missing": "Control not installed",
+  };
+  const label = labels[kind] || "Helper Off";
   els.helperStatus.textContent = label;
   els.helperStatus.className = `status status-${kind}`;
+}
+
+function applyHealth(health) {
+  if (health?.service !== "youtube-channel-downloader") return false;
+  state.helperOnline = true;
+  state.dependencies = {
+    yt_dlp: Boolean(health.dependencies?.yt_dlp),
+    ffmpeg: Boolean(health.dependencies?.ffmpeg),
+  };
+  setHelperStatus(health.ok ? "online" : "limited");
+  return true;
+}
+
+function markHelperOff() {
+  state.helperOnline = false;
+  state.dependencies = { yt_dlp: false, ffmpeg: false };
+  setHelperStatus(state.helperControlAvailable ? "offline" : "control-missing");
 }
 
 function formatDuration(seconds) {
@@ -74,11 +108,37 @@ function formatDuration(seconds) {
 function refreshControls() {
   els.folderPath.textContent = state.folderPath || "No folder selected";
   els.selectionCount.textContent = `${state.selectedIds.size} selected`;
-  els.startDownload.disabled = !canStartDownload({ ...state, mode: els.mode.value });
+  const autoStartAvailable = state.autoStartHelper && state.helperControlAvailable && !state.helperTransition;
+  const helperCanStart = state.helperOnline || autoStartAvailable;
+  const baseDownloadReady = Boolean(state.folderPath) && state.selectedIds.size > 0 && !state.downloading;
+  els.startDownload.disabled = state.helperOnline
+    ? !canStartDownload({ ...state, mode: els.mode.value })
+    : !(baseDownloadReady && autoStartAvailable);
   els.startDownload.textContent = state.downloading ? "Downloading..." : "Download Selected";
   els.quality.disabled = !["video", "everything"].includes(els.mode.value);
-  els.loadChannel.disabled = !state.helperOnline || !state.dependencies.yt_dlp;
-  els.chooseFolder.disabled = !state.helperOnline;
+  els.loadChannel.disabled = Boolean(state.helperTransition) || !helperCanStart || (state.helperOnline && !state.dependencies.yt_dlp);
+  els.chooseFolder.disabled = Boolean(state.helperTransition) || !helperCanStart;
+  els.autoStartHelper.checked = state.autoStartHelper;
+  els.helperToggle.disabled = Boolean(state.helperTransition) || state.downloading || !state.helperControlAvailable;
+  els.helperToggle.textContent = state.helperTransition === "starting"
+    ? "Starting…"
+    : state.helperTransition === "stopping"
+      ? "Stopping…"
+      : state.helperOnline
+        ? "Turn Off"
+        : "Turn On";
+
+  if (!state.helperControlAvailable) {
+    els.helperControlMessage.textContent = "Helper control not installed. Run scripts/setup.ps1 once.";
+  } else if (state.helperOnline) {
+    els.helperControlMessage.textContent = state.autoStartHelper
+      ? "Connected. Auto-start is enabled for future use."
+      : "Connected. Manual mode is enabled.";
+  } else if (state.autoStartHelper) {
+    els.helperControlMessage.textContent = "Helper is off. It will start automatically when needed.";
+  } else {
+    els.helperControlMessage.textContent = "Helper is off. Press Turn On to use the downloader.";
+  }
 }
 
 function renderVideos() {
@@ -159,6 +219,7 @@ async function savePreferences() {
   await chrome.storage.local.set({
     mode: els.mode.value,
     quality: els.quality.value,
+    autoStartHelper: state.autoStartHelper,
     folderPath: state.folderPath,
     currentJobId: state.currentJobId,
     channelUrl: state.channelUrl,
@@ -166,6 +227,63 @@ async function savePreferences() {
     videos: state.videos,
     selectedIds: [...state.selectedIds],
   });
+}
+
+async function requireHelper(actionName) {
+  const shouldShowStarting = !state.helperOnline && state.autoStartHelper;
+  if (shouldShowStarting) {
+    state.helperTransition = "starting";
+    setHelperStatus("starting");
+    refreshControls();
+  }
+  try {
+    const result = await ensureHelperReady({
+      api,
+      chromeApi: chrome,
+      autoStart: state.autoStartHelper,
+    });
+    if (!applyHealth(result.health)) throw new Error("Unexpected helper service responded on the local port.");
+    if (result.started) {
+      state.helperControlAvailable = true;
+      state.helperOwned = true;
+    }
+    state.helperTransition = null;
+    refreshControls();
+    return true;
+  } catch (error) {
+    state.helperTransition = null;
+    if (error?.code === "native_host_missing") state.helperControlAvailable = false;
+    markHelperOff();
+    showError(error?.message || `${actionName} needs the local helper.`);
+    refreshControls();
+    return false;
+  }
+}
+
+async function inspectHelperControl() {
+  let health = null;
+  try {
+    health = await api.health();
+  } catch {
+    health = null;
+  }
+  if (!applyHealth(health)) markHelperOff();
+
+  try {
+    const status = await sendControlCommand(chrome, "status");
+    state.helperControlAvailable = true;
+    state.helperOwned = Boolean(status.owned);
+    if (!state.helperOnline && status.healthy) {
+      const ready = await waitForHelper(api, { attempts: 4, delayMs: 75 });
+      applyHealth(ready);
+    }
+  } catch (error) {
+    if (error?.code === "native_host_missing") {
+      state.helperControlAvailable = false;
+      if (!state.helperOnline) setHelperStatus("control-missing");
+    }
+  }
+  refreshControls();
 }
 
 async function recoverMissingJob() {
@@ -217,6 +335,11 @@ els.loadChannel.addEventListener("click", async () => {
   els.channelMessage.textContent = "Loading channel…";
 
   try {
+    if (!(await requireHelper("load"))) {
+      els.channelMessage.textContent = "";
+      return;
+    }
+    if (!state.dependencies.yt_dlp) throw new Error("yt-dlp is not installed. Run scripts/setup.ps1.");
     const result = await api.loadChannel(url);
     state.channelUrl = url;
     state.videos = result.videos;
@@ -242,6 +365,8 @@ els.channelUrl.addEventListener("keydown", (event) => {
 els.chooseFolder.addEventListener("click", async () => {
   showError();
   try {
+    await savePreferences();
+    if (!(await requireHelper("choose folder"))) return;
     await savePreferences();
     const result = await api.pickFolder();
     if (!result.cancelled && result.path) state.folderPath = result.path;
@@ -271,8 +396,59 @@ for (const select of [els.mode, els.quality]) {
   });
 }
 
+els.autoStartHelper.addEventListener("change", async () => {
+  state.autoStartHelper = els.autoStartHelper.checked;
+  refreshControls();
+  await savePreferences();
+});
+
+els.helperToggle.addEventListener("click", async () => {
+  showError();
+  if (state.downloading) {
+    showError("Wait for the current download to finish before turning the helper off.");
+    return;
+  }
+  if (state.helperTransition) return;
+
+  if (state.helperOnline) {
+    state.helperTransition = "stopping";
+    setHelperStatus("stopping");
+    refreshControls();
+    try {
+      await sendControlCommand(chrome, "stop");
+      state.helperOwned = false;
+      state.helperTransition = null;
+      markHelperOff();
+    } catch (error) {
+      state.helperTransition = null;
+      if (error?.code === "native_host_missing") state.helperControlAvailable = false;
+      showError(error?.message || "Could not stop helper.");
+    }
+    refreshControls();
+    return;
+  }
+
+  state.helperTransition = "starting";
+  setHelperStatus("starting");
+  refreshControls();
+  try {
+    const result = await sendControlCommand(chrome, "start");
+    state.helperControlAvailable = true;
+    state.helperOwned = Boolean(result.owned);
+    const health = await waitForHelper(api);
+    applyHealth(health);
+  } catch (error) {
+    if (error?.code === "native_host_missing") state.helperControlAvailable = false;
+    markHelperOff();
+    showError(error?.message || "Could not start helper.");
+  } finally {
+    state.helperTransition = null;
+    refreshControls();
+  }
+});
+
 els.startDownload.addEventListener("click", async () => {
-  if (!canStartDownload({ ...state, mode: els.mode.value })) return;
+  if (!state.folderPath || state.selectedIds.size === 0 || state.downloading) return;
   showError();
 
   const videos = state.videos
@@ -285,6 +461,12 @@ els.startDownload.addEventListener("click", async () => {
     }));
 
   try {
+    if (!(await requireHelper("download"))) return;
+    if (!canStartDownload({ ...state, mode: els.mode.value })) {
+      throw new Error(els.mode.value === "transcript"
+        ? "yt-dlp is not installed. Run scripts/setup.ps1."
+        : "FFmpeg or yt-dlp is unavailable. Run scripts/setup.ps1.");
+    }
     state.downloading = true;
     refreshControls();
     const result = await api.createJob({
@@ -306,6 +488,7 @@ els.retryFailed.addEventListener("click", async () => {
   if (!state.currentJobId) return;
 
   try {
+    if (!(await requireHelper("retry"))) return;
     state.downloading = true;
     refreshControls();
     const result = await retryJobOrRecover(api, state.currentJobId, recoverMissingJob);
@@ -324,6 +507,7 @@ async function initialize() {
   const stored = await chrome.storage.local.get([
     "mode",
     "quality",
+    "autoStartHelper",
     "folderPath",
     "currentJobId",
     "channelUrl",
@@ -335,6 +519,8 @@ async function initialize() {
   const draft = normalizeChannelDraft(stored);
   els.mode.value = prefs.mode;
   els.quality.value = prefs.quality;
+  state.autoStartHelper = prefs.autoStartHelper;
+  els.autoStartHelper.checked = prefs.autoStartHelper;
   state.folderPath = typeof stored.folderPath === "string" ? stored.folderPath : "";
   state.currentJobId = normalizeCurrentJobId(stored.currentJobId);
   state.channelUrl = draft.channelUrl;
@@ -350,38 +536,33 @@ async function initialize() {
   }
   refreshControls();
 
-  try {
-    const health = await api.health();
-    state.helperOnline = true;
-    state.dependencies = {
-      yt_dlp: Boolean(health.dependencies?.yt_dlp),
-      ffmpeg: Boolean(health.dependencies?.ffmpeg),
-    };
-    setHelperStatus(health.ok ? "online" : "limited");
+  await inspectHelperControl();
 
-    if (!health.ok && health.dependencies?.messages?.length) {
-      showError(health.dependencies.messages.join(" "));
-    }
-
-    const folder = await api.getFolder();
-    state.folderPath = folder.path || "";
-
-    if (state.currentJobId) {
-      const job = await getJobOrRecover(api, state.currentJobId, recoverMissingJob);
-      if (job) {
-        renderJob(job);
-        state.downloading = job.status !== "completed";
-        if (state.downloading) state.pollTimer = setTimeout(pollJob, 250);
+  if (state.helperOnline) {
+    try {
+      const health = await api.health();
+      applyHealth(health);
+      if (!health.ok && health.dependencies?.messages?.length) {
+        showError(health.dependencies.messages.join(" "));
       }
-    }
+      const folder = await api.getFolder();
+      state.folderPath = folder.path || state.folderPath;
 
-    await savePreferences();
-  } catch (error) {
-    state.helperOnline = false;
-    state.dependencies = { yt_dlp: false, ffmpeg: false };
-    setHelperStatus("offline");
-    showError(error.message);
+      if (state.currentJobId) {
+        const job = await getJobOrRecover(api, state.currentJobId, recoverMissingJob);
+        if (job) {
+          state.downloading = job.status !== "completed";
+          renderJob(job);
+          if (state.downloading) state.pollTimer = setTimeout(pollJob, 250);
+        }
+      }
+    } catch (error) {
+      markHelperOff();
+      showError(error.message);
+    }
   }
+
+  await savePreferences();
 
   refreshControls();
 }
