@@ -3,7 +3,7 @@
   "name": "YouTube Channel Downloader",
   "version": "1.0.0",
   "description": "Private local helper UI for downloading permitted YouTube channel content.",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage"],
   "host_permissions": ["http://127.0.0.1:17865/*"],
   "action": {
     "default_title": "YouTube Channel Downloader",

@@ -1,42 +1,87 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 
 const popupHtml = new URL("../../extension/popup.html", import.meta.url);
+const popupCss = new URL("../../extension/popup.css", import.meta.url);
 const popupJs = new URL("../../extension/popup.js", import.meta.url);
+const downloaderHtml = new URL("../../extension/downloader.html", import.meta.url);
+const downloaderJs = new URL("../../extension/downloader.js", import.meta.url);
+const navigationJs = new URL("../../extension/navigation.js", import.meta.url);
+
+const requiredIds = [
+  "helperStatus",
+  "channelUrl",
+  "loadChannel",
+  "channelMessage",
+  "folderPath",
+  "chooseFolder",
+  "videoSection",
+  "channelName",
+  "selectionCount",
+  "videoList",
+  "selectAll",
+  "clearAll",
+  "mode",
+  "quality",
+  "startDownload",
+  "retryFailed",
+  "progressPanel",
+  "progressSummary",
+  "jobItems",
+  "errorMessage",
+];
 
 
-test("popup is a compact launcher instead of the full downloader", async () => {
+test("popup contains the complete downloader workflow", async () => {
   const html = await readFile(popupHtml, "utf8");
 
-  for (const id of ["openDownloader", "helperStatus", "helperMessage"]) {
-    assert.match(html, new RegExp(`id=["']${id}["']`));
+  for (const id of requiredIds) {
+    assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
   }
 
-  for (const removedId of ["channelUrl", "videoList", "startDownload"]) {
-    assert.doesNotMatch(html, new RegExp(`id=["']${removedId}["']`));
-  }
-
+  assert.doesNotMatch(html, /id=["']openDownloader["']/);
   assert.match(html, /<script[^>]+type=["']module["'][^>]+src=["']popup\.js["']/);
 });
 
 
-test("popup launcher uses shared downloader navigation", async () => {
-  const source = await readFile(popupJs, "utf8");
+test("popup keeps output and quality controls in the main flow", async () => {
+  const html = await readFile(popupHtml, "utf8");
 
-  assert.match(source, /import\s*\{\s*openOrFocusDownloader\s*\}\s*from\s*["']\.\/navigation\.js["']/);
-  assert.match(source, /openDownloader\.addEventListener\(["']click["']/);
-  assert.match(source, /openOrFocusDownloader\(chrome\)/);
+  for (const mode of ["video", "audio", "transcript", "everything"]) {
+    assert.match(html, new RegExp(`<option\\s+value=["']${mode}["']`));
+  }
+
+  for (const quality of ["360", "720", "1080", "best"]) {
+    assert.match(html, new RegExp(`<option\\s+value=["']${quality}["']`));
+  }
 });
 
 
-test("offline popup keeps the launcher usable and explains how to start the helper", async () => {
-  const html = await readFile(popupHtml, "utf8");
+test("popup layout is sized for browsing videos without becoming a full page", async () => {
+  const css = await readFile(popupCss, "utf8");
+
+  assert.match(css, /\.shell\s*\{[^}]*width\s*:\s*540px/i);
+  assert.match(css, /\.shell\s*\{[^}]*max-height\s*:\s*580px/i);
+  assert.match(css, /\.video-list\s*\{[^}]*max-height\s*:\s*340px[^}]*overflow-y\s*:\s*auto/i);
+  assert.match(css, /\.download-bar\s*\{[^}]*position\s*:\s*sticky/i);
+});
+
+
+test("popup owns job persistence and stale-job recovery", async () => {
   const source = await readFile(popupJs, "utf8");
 
-  assert.doesNotMatch(html, /id=["']openDownloader["'][^>]*disabled/);
-  assert.doesNotMatch(source, /openDownloader\.disabled\s*=\s*true/);
-  assert.match(source, /Offline/);
-  assert.match(source, /start-helper\.ps1/);
+  assert.match(source, /getJobOrRecover/);
+  assert.match(source, /retryJobOrRecover/);
+  assert.match(source, /currentJobId/);
+  assert.match(source, /chrome\.storage\.local\.get\(\["mode", "quality", "folderPath", "currentJobId"\]\)/);
+  assert.doesNotMatch(source, /openOrFocusDownloader/);
+});
+
+
+test("full-page downloader and launcher navigation are removed", async () => {
+  await assert.rejects(access(downloaderHtml));
+  await assert.rejects(access(downloaderJs));
+  await assert.rejects(access(navigationJs));
 });

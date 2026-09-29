@@ -52,10 +52,10 @@ def test_readme_documents_complete_setup_and_usage_path():
         assert (ROOT / relative).exists()
 
 
-def test_setup_and_downloader_preserve_dependency_and_job_lifecycle_contracts():
+def test_setup_and_popup_preserve_dependency_and_job_lifecycle_contracts():
     setup = (ROOT / "scripts" / "setup.ps1").read_text(encoding="utf-8")
-    downloader = (ROOT / "extension" / "downloader.js").read_text(encoding="utf-8")
+    popup = (ROOT / "extension" / "popup.js").read_text(encoding="utf-8")
 
     assert "Setup incomplete" in setup
-    assert "currentJobId" in downloader
-    assert 'chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"])' in downloader
+    assert "currentJobId" in popup
+    assert 'chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"])' in popup

@@ -8,30 +8,95 @@
 </head>
 <body>
   <main class="shell">
-    <header class="brand-row">
-      <div class="brand-copy">
+    <header class="topbar">
+      <div class="brand">
         <div class="brand-mark" aria-hidden="true">↓</div>
         <div>
+          <span class="eyebrow">YouTube utility</span>
           <h1>Channel Downloader</h1>
-          <p>Pick the videos you actually want.</p>
+          <p>Paste a channel, pick the videos, download only those.</p>
         </div>
       </div>
       <span id="helperStatus" class="status status-offline">Offline</span>
     </header>
 
-    <section class="launcher-card">
-      <span class="eyebrow">Full downloader</span>
-      <h2>Paste a channel link, then choose the videos.</h2>
-      <p class="supporting-copy">The full page gives the video list more room without changing the workflow you already use.</p>
-      <button id="openDownloader" class="primary">Open Downloader <span aria-hidden="true">↗</span></button>
+    <section class="panel source-card">
+      <label for="channelUrl">YouTube channel</label>
+      <div class="input-row">
+        <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off" spellcheck="false">
+        <button id="loadChannel" class="primary">Load</button>
+      </div>
+      <p id="channelMessage" class="message" aria-live="polite"></p>
     </section>
 
-    <section class="helper-card" aria-live="polite">
-      <div class="helper-dot" aria-hidden="true"></div>
-      <p id="helperMessage">Checking local helper…</p>
+    <p id="errorMessage" class="error hidden" role="alert"></p>
+
+    <section id="videoSection" class="panel video-panel hidden">
+      <div class="video-header">
+        <div>
+          <span class="eyebrow">Videos</span>
+          <h2 id="channelName">Channel</h2>
+        </div>
+        <span id="selectionCount" class="selection-count">0 selected</span>
+      </div>
+      <div class="video-toolbar">
+        <span>Choose what you want to save</span>
+        <div>
+          <button id="selectAll" class="text-button">Select all</button>
+          <button id="clearAll" class="text-button">Clear</button>
+        </div>
+      </div>
+      <div id="videoList" class="video-list"></div>
     </section>
 
-    <footer>Runs locally through your helper.</footer>
+    <section class="settings-row">
+      <div class="setting-card folder-card">
+        <span class="eyebrow">Save to</span>
+        <strong id="folderPath">No folder selected</strong>
+        <button id="chooseFolder" class="secondary">Choose Folder</button>
+      </div>
+
+      <label class="setting-card">
+        <span class="eyebrow">Output</span>
+        <select id="mode">
+          <option value="video">Video</option>
+          <option value="audio">Audio (MP3)</option>
+          <option value="transcript">Transcript</option>
+          <option value="everything">Everything</option>
+        </select>
+      </label>
+
+      <label class="setting-card">
+        <span class="eyebrow">Quality</span>
+        <select id="quality">
+          <option value="360">360p</option>
+          <option value="720">720p</option>
+          <option value="1080">1080p</option>
+          <option value="best">Best available</option>
+        </select>
+      </label>
+    </section>
+
+    <section id="progressPanel" class="panel progress-panel hidden">
+      <div class="progress-header">
+        <strong>Download progress</strong>
+        <span id="progressSummary" class="muted"></span>
+      </div>
+      <div id="jobItems" class="job-list"></div>
+    </section>
+
+    <section class="download-bar">
+      <div class="download-copy">
+        <strong>Ready to download</strong>
+        <span>Only selected videos are sent to your local helper.</span>
+      </div>
+      <div class="download-actions">
+        <button id="retryFailed" class="secondary hidden">Retry Failed</button>
+        <button id="startDownload" class="primary download-button" disabled>Download Selected</button>
+      </div>
+    </section>
+
+    <footer>Use only for content you own or have permission to download.</footer>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

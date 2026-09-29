@@ -43,20 +43,19 @@ Keep that helper running while you use the extension.
 
 ## Use it
 
-1. Click the toolbar extension. The compact launcher shows **Connected** when the local helper is reachable.
-2. Click **Open Downloader**. This opens the full downloader page, or focuses the existing downloader tab if it is already open.
-3. Paste a public YouTube channel URL such as `https://youtube.com/@channel`.
-4. Click **Load Videos**.
+1. Click the toolbar extension. The complete downloader opens directly in the popup and shows **Connected** when the local helper is reachable.
+2. Paste a public YouTube channel URL such as `https://youtube.com/@channel`.
+3. Click **Load**.
+4. Select individual videos, or use **Select all** / **Clear**.
 5. Click **Choose Folder** and pick exactly where you want the downloads stored. The helper remembers this folder until you change it.
-6. Select individual videos, or use **Select all** / **Clear**.
-7. Choose an output:
+6. Choose an output:
    - **Video**
    - **Audio (MP3)**
    - **Transcript**
    - **Everything**
-8. For Video or Everything, choose **360p**, **720p**, **1080p**, or **Best available**.
-9. Click **Download Selected**.
-10. Watch the progress list. If an item fails, use **Retry Failed**.
+7. For Video or Everything, choose **360p**, **720p**, **1080p**, or **Best available**.
+8. Click **Download Selected**.
+9. Watch the progress list. If an item fails, use **Retry Failed**.
 
 If a video has creator-provided captions, those are preferred. Automatic captions are used when available as a fallback. Transcript downloads create both `transcript.vtt` and a cleaned `transcript.txt`. A missing transcript does not cancel the rest of a bulk job.
 
