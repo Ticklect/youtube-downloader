@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="red">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,70 +9,67 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">↓</div>
-        <div>
-          <span class="eyebrow">YouTube utility</span>
-          <h1>Channel Downloader</h1>
-          <p>Paste a channel, pick the videos, download only those.</p>
+      <div class="title-block">
+        <h1>Channel Downloader</h1>
+        <p>Save selected videos from a YouTube channel.</p>
+      </div>
+      <div class="header-tools">
+        <span id="helperStatus" class="status status-offline">Helper Off</span>
+        <div class="theme-switch" role="group" aria-label="Appearance theme">
+          <button id="themeRed" class="theme-option" type="button" aria-pressed="true">Red</button>
+          <button id="themeMono" class="theme-option" type="button" aria-pressed="false">Mono</button>
         </div>
       </div>
-      <span id="helperStatus" class="status status-offline">Offline</span>
     </header>
 
-    <section id="helperControl" class="panel helper-control">
+    <section id="helperControl" class="helper-control utility-section" aria-label="Local helper controls">
       <div class="helper-control-row">
-        <div>
-          <span class="eyebrow">Local helper</span>
-          <strong>Background downloader service</strong>
+        <div class="helper-copy">
+          <strong>Local helper</strong>
+          <span id="helperControlMessage" class="message" aria-live="polite">Checking helper control…</span>
         </div>
-        <button id="helperToggle" class="secondary">Turn On</button>
+        <label class="auto-start-row">
+          <input id="autoStartHelper" type="checkbox" checked>
+          <span>Auto-start when needed</span>
+        </label>
+        <button id="helperToggle" class="secondary compact-button" type="button">Turn On</button>
       </div>
-      <label class="auto-start-row">
-        <input id="autoStartHelper" type="checkbox" checked>
-        <span>Auto-start when needed</span>
-      </label>
-      <p id="helperControlMessage" class="message" aria-live="polite">Checking helper control…</p>
     </section>
 
-    <section class="panel source-card">
-      <label for="channelUrl">YouTube channel</label>
+    <section class="source-section utility-section">
+      <label class="field-label" for="channelUrl">Channel URL</label>
       <div class="input-row">
         <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off" spellcheck="false">
-        <button id="loadChannel" class="primary">Load</button>
+        <button id="loadChannel" class="primary" type="button">Load channel</button>
       </div>
       <p id="channelMessage" class="message" aria-live="polite"></p>
     </section>
 
     <p id="errorMessage" class="error hidden" role="alert"></p>
 
-    <section id="videoSection" class="panel video-panel hidden">
+    <section id="videoSection" class="video-section hidden">
       <div class="video-header">
-        <div>
-          <span class="eyebrow">Videos</span>
+        <div class="video-heading">
           <h2 id="channelName">Channel</h2>
+          <span id="selectionCount" class="selection-count">0 selected</span>
         </div>
-        <span id="selectionCount" class="selection-count">0 selected</span>
-      </div>
-      <div class="video-toolbar">
-        <span>Choose what you want to save</span>
-        <div>
-          <button id="selectAll" class="text-button">Select all</button>
-          <button id="clearAll" class="text-button">Clear</button>
+        <div class="video-actions">
+          <button id="selectAll" class="text-button" type="button">Select all</button>
+          <button id="clearAll" class="text-button" type="button">Clear</button>
         </div>
       </div>
       <div id="videoList" class="video-list"></div>
     </section>
 
-    <section class="settings-row">
-      <div class="setting-card folder-card">
-        <span class="eyebrow">Save to</span>
+    <section class="settings-row" aria-label="Download settings">
+      <div class="setting-cell folder-cell">
+        <span class="setting-label">Save to</span>
         <strong id="folderPath">No folder selected</strong>
-        <button id="chooseFolder" class="secondary">Choose Folder</button>
+        <button id="chooseFolder" class="text-button choose-folder" type="button">Choose folder</button>
       </div>
 
-      <label class="setting-card">
-        <span class="eyebrow">Output</span>
+      <label class="setting-cell">
+        <span class="setting-label">Output</span>
         <select id="mode">
           <option value="video">Video</option>
           <option value="audio">Audio (MP3)</option>
@@ -81,8 +78,8 @@
         </select>
       </label>
 
-      <label class="setting-card">
-        <span class="eyebrow">Quality</span>
+      <label class="setting-cell">
+        <span class="setting-label">Quality</span>
         <select id="quality">
           <option value="360">360p</option>
           <option value="720">720p</option>
@@ -92,7 +89,7 @@
       </label>
     </section>
 
-    <section id="progressPanel" class="panel progress-panel hidden">
+    <section id="progressPanel" class="progress-panel hidden">
       <div class="progress-header">
         <strong>Download progress</strong>
         <span id="progressSummary" class="muted"></span>
@@ -102,16 +99,16 @@
 
     <section class="download-bar">
       <div class="download-copy">
-        <strong>Ready to download</strong>
-        <span>Only selected videos are sent to your local helper.</span>
+        <strong id="downloadSummary">Ready</strong>
+        <span>Only selected videos will be downloaded.</span>
       </div>
       <div class="download-actions">
-        <button id="retryFailed" class="secondary hidden">Retry Failed</button>
-        <button id="startDownload" class="primary download-button" disabled>Download Selected</button>
+        <button id="retryFailed" class="secondary hidden" type="button">Retry failed</button>
+        <button id="startDownload" class="primary download-button" type="button" disabled>Download selected</button>
       </div>
     </section>
 
-    <footer>Use only for content you own or have permission to download.</footer>
+    <footer>Download only content you own or have permission to save.</footer>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

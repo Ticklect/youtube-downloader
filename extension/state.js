@@ -1,5 +1,6 @@
 export const MODES = ["video", "audio", "transcript", "everything"];
 export const QUALITIES = ["360", "720", "1080", "best"];
+export const THEMES = ["red", "mono"];
 
 export function selectAllVideos(videos) {
   return new Set(videos.map((video) => video.video_id));
@@ -32,6 +33,7 @@ export function normalizePreferences(raw = {}) {
     mode: MODES.includes(raw.mode) ? raw.mode : "video",
     quality: QUALITIES.includes(raw.quality) ? raw.quality : "best",
     autoStartHelper: raw.autoStartHelper === false ? false : true,
+    theme: THEMES.includes(raw.theme) ? raw.theme : "red",
   };
 }
 

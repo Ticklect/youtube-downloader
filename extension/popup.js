@@ -19,6 +19,8 @@ const els = {
   helperToggle: $("helperToggle"),
   autoStartHelper: $("autoStartHelper"),
   helperControlMessage: $("helperControlMessage"),
+  themeRed: $("themeRed"),
+  themeMono: $("themeMono"),
   channelUrl: $("channelUrl"),
   loadChannel: $("loadChannel"),
   channelMessage: $("channelMessage"),
@@ -34,6 +36,7 @@ const els = {
   quality: $("quality"),
   startDownload: $("startDownload"),
   retryFailed: $("retryFailed"),
+  downloadSummary: $("downloadSummary"),
   progressPanel: $("progressPanel"),
   progressSummary: $("progressSummary"),
   jobItems: $("jobItems"),
@@ -46,6 +49,7 @@ const state = {
   helperOwned: false,
   helperTransition: null,
   autoStartHelper: true,
+  theme: "red",
   dependencies: { yt_dlp: false, ffmpeg: false },
   channelUrl: "",
   videos: [],
@@ -56,6 +60,13 @@ const state = {
   currentJobId: null,
   pollTimer: null,
 };
+
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  els.themeRed.setAttribute("aria-pressed", String(theme === "red"));
+  els.themeMono.setAttribute("aria-pressed", String(theme === "mono"));
+}
 
 function showError(message) {
   const value = message || "";
@@ -114,7 +125,15 @@ function refreshControls() {
   els.startDownload.disabled = state.helperOnline
     ? !canStartDownload({ ...state, mode: els.mode.value })
     : !(baseDownloadReady && autoStartAvailable);
-  els.startDownload.textContent = state.downloading ? "Downloading..." : "Download Selected";
+  const selectedCount = state.selectedIds.size;
+  const destination = state.folderPath || "Choose a folder";
+  els.downloadSummary.textContent = `${selectedCount} selected · ${destination}`;
+  els.downloadSummary.title = els.downloadSummary.textContent;
+  els.startDownload.textContent = state.downloading
+    ? "Downloading…"
+    : selectedCount > 0
+      ? `Download ${selectedCount} video${selectedCount === 1 ? "" : "s"}`
+      : "Download selected";
   els.quality.disabled = !["video", "everything"].includes(els.mode.value);
   els.loadChannel.disabled = Boolean(state.helperTransition) || !helperCanStart || (state.helperOnline && !state.dependencies.yt_dlp);
   els.chooseFolder.disabled = Boolean(state.helperTransition) || !helperCanStart;
@@ -220,6 +239,7 @@ async function savePreferences() {
     mode: els.mode.value,
     quality: els.quality.value,
     autoStartHelper: state.autoStartHelper,
+    theme: state.theme,
     folderPath: state.folderPath,
     currentJobId: state.currentJobId,
     channelUrl: state.channelUrl,
@@ -396,6 +416,16 @@ for (const select of [els.mode, els.quality]) {
   });
 }
 
+els.themeRed.addEventListener("click", async () => {
+  applyTheme("red");
+  await savePreferences();
+});
+
+els.themeMono.addEventListener("click", async () => {
+  applyTheme("mono");
+  await savePreferences();
+});
+
 els.autoStartHelper.addEventListener("change", async () => {
   state.autoStartHelper = els.autoStartHelper.checked;
   refreshControls();
@@ -508,6 +538,7 @@ async function initialize() {
     "mode",
     "quality",
     "autoStartHelper",
+    "theme",
     "folderPath",
     "currentJobId",
     "channelUrl",
@@ -521,6 +552,7 @@ async function initialize() {
   els.quality.value = prefs.quality;
   state.autoStartHelper = prefs.autoStartHelper;
   els.autoStartHelper.checked = prefs.autoStartHelper;
+  applyTheme(prefs.theme);
   state.folderPath = typeof stored.folderPath === "string" ? stored.folderPath : "";
   state.currentJobId = normalizeCurrentJobId(stored.currentJobId);
   state.channelUrl = draft.channelUrl;

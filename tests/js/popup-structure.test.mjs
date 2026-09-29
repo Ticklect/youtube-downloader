@@ -16,6 +16,8 @@ const requiredIds = [
   "helperToggle",
   "autoStartHelper",
   "helperControlMessage",
+  "themeRed",
+  "themeMono",
   "channelUrl",
   "loadChannel",
   "channelMessage",
@@ -93,6 +95,40 @@ test("popup persists the loaded channel and selection before opening the native 
   assert.match(source, /await\s+savePreferences\(\);\s*\n\s*const\s+result\s*=\s*await\s+api\.pickFolder\(\)/);
   assert.match(source, /chrome\.storage\.local\.get\(\[[^\]]*"channelUrl"[^\]]*"videos"[^\]]*"selectedIds"[^\]]*\]\)/s);
   assert.match(source, /normalizeChannelDraft\(stored\)/);
+});
+
+
+test("popup uses a flat utility visual system instead of decorative AI-dashboard effects", async () => {
+  const html = await readFile(popupHtml, "utf8");
+  const css = await readFile(popupCss, "utf8");
+
+  assert.match(html, /id=["']themeRed["']/);
+  assert.match(html, /id=["']themeMono["']/);
+  assert.match(css, /html\[data-theme=["']red["']\]/);
+  assert.match(css, /html\[data-theme=["']mono["']\]/);
+  assert.doesNotMatch(css, /linear-gradient|radial-gradient|backdrop-filter/i);
+  assert.doesNotMatch(css, /border-radius\s*:\s*999px/i);
+  assert.doesNotMatch(html, /class=["'][^"']*brand-mark/);
+});
+
+
+test("popup persists and restores the selected appearance theme", async () => {
+  const source = await readFile(popupJs, "utf8");
+
+  assert.match(source, /theme:\s*state\.theme/);
+  assert.match(source, /"theme"/);
+  assert.match(source, /document\.documentElement\.dataset\.theme\s*=\s*theme/);
+  assert.match(source, /themeRed\.addEventListener\(["']click["']/);
+  assert.match(source, /themeMono\.addEventListener\(["']click["']/);
+});
+
+
+test("sticky download bar summarizes the real selection and destination", async () => {
+  const source = await readFile(popupJs, "utf8");
+
+  assert.match(source, /downloadSummary:\s*\$\(["']downloadSummary["']\)/);
+  assert.match(source, /selectedCount.*selected.*folderPath/s);
+  assert.match(source, /els\.downloadSummary\.textContent/);
 });
 
 test("popup exposes manual helper control and auto-start preference", async () => {
