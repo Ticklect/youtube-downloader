@@ -1,8 +1,10 @@
-# YouTube Channel Downloader
+# YouTube Downloader
 
-A private Chrome extension plus Windows helper for downloading public YouTube content you own or have permission to download. It can load a whole public channel, let you pick all or individual videos, choose the exact download folder, and save video, MP3 audio, transcripts, or all of them.
+A Chrome extension plus Windows helper for downloading public YouTube content you own or have permission to download. It can load a whole public channel, let you pick all or individual videos, choose the exact download folder, and save video, MP3 audio, transcripts, or all of them.
 
 The helper is local-only. It binds to `127.0.0.1:17865` and does not use a cloud backend.
+
+**Usage notice:** Use this tool only to download videos or channels that you own or have explicit permission to download. You are responsible for ensuring you have the rights or authorization to save any content you download.
 
 ## Requirements
 
@@ -33,7 +35,7 @@ winget install Gyan.FFmpeg
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
 4. Select this project's `extension` folder.
-5. Pin **YouTube Channel Downloader** if you want it visible on the toolbar.
+5. Pin **YouTube Downloader** if you want it visible on the toolbar.
 
 ## Use it
 

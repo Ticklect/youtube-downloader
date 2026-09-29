@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Channel Downloader",
+  "name": "YouTube Downloader",
   "version": "1.0.0",
-  "description": "Private local helper UI for downloading permitted YouTube channel content.",
+  "description": "Local helper UI for downloading permitted YouTube channel content.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8UikcVQbfp+X4rnmsjacfO4Mw+uxP7XJtJe86PCTWa78KbXNxRS6gntiCXq8FQvtk51idNFxoza+/Qt2fmd/ab/HxiZk/4Pb9igTN2aiCcHhCnx7MtwBnB5mLvMUslYG+2Yz2JS9JEO5T7DbbtoogNObIbL9+24h521wQfn/esLmGlYAWCF2cCYFUgoG9o1pWYOiEz7CTC7ZscMIQDntN9R2ANGbAvfr0E103WsKuv6OeoABDRWvc6Ku5In652mVs7zoVdOuQChwZgkaqoHzOWBHNXPKoeNMwGlCWUKuG6d1/jBhMTh/RL/LMldSlwtGNVfMAvfioI3z9uew3tg7mQIDAQAB",
   "permissions": ["storage", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:17865/*"],
   "action": {
-    "default_title": "YouTube Channel Downloader",
+    "default_title": "YouTube Downloader",
     "default_popup": "popup.html"
   }
 }

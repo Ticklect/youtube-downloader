@@ -1,1 +1,1 @@
-"""Local helper for the YouTube Channel Downloader extension."""
+"""Local helper for the YouTube Downloader extension."""

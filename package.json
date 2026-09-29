@@ -1,5 +1,5 @@
 {
-  "name": "youtube-channel-downloader",
+  "name": "youtube-downloader",
   "private": true,
   "type": "module",
   "scripts": {

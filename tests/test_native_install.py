@@ -46,7 +46,7 @@ def test_installer_generates_deterministic_native_manifest_and_config(tmp_path):
     manifest = json.loads(first_manifest)
     config = json.loads(first_config)
     assert manifest["name"] == HOST_NAME
-    assert manifest["description"] == "YouTube Channel Downloader helper control"
+    assert manifest["description"] == "YouTube Downloader helper control"
     assert manifest["type"] == "stdio"
     assert Path(manifest["path"]).is_absolute()
     assert manifest["path"] == str((artifact_root / "dist" / "ycd-helper-control.exe").resolve())

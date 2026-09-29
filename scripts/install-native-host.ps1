@@ -84,7 +84,7 @@ $config = [ordered]@{
 }
 $nativeManifest = [ordered]@{
     name = "com.ycd.helper_control"
-    description = "YouTube Channel Downloader helper control"
+    description = "YouTube Downloader helper control"
     path = [System.IO.Path]::GetFullPath($HostExe)
     type = "stdio"
     allowed_origins = @($AllowedOrigin)
