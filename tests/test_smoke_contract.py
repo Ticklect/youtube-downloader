@@ -58,4 +58,6 @@ def test_setup_and_popup_preserve_dependency_and_job_lifecycle_contracts():
 
     assert "Setup incomplete" in setup
     assert "currentJobId" in popup
-    assert 'chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"])' in popup
+    assert "chrome.storage.local.get([" in popup
+    for key in ["mode", "quality", "folderPath", "currentJobId", "channelUrl", "channelName", "videos", "selectedIds"]:
+        assert f'"{key}"' in popup

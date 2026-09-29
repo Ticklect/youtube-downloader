@@ -5,6 +5,7 @@ import {
   canRetryFailed,
   canStartDownload,
   clearSelection,
+  normalizeChannelDraft,
   normalizeCurrentJobId,
   normalizePreferences,
   selectAllVideos,
@@ -88,4 +89,21 @@ test("retry failed is only available after the job has completed", () => {
   assert.equal(canRetryFailed(completedWithFailure, true), false);
   assert.equal(canRetryFailed(completedWithFailure, false), true);
   assert.equal(canRetryFailed({ status: "completed", items: [{ state: "completed" }] }, false), false);
+});
+
+test("channel draft restoration preserves only valid loaded selections", () => {
+  const videoA = { video_id: "a", title: "Alpha", url: "https://youtube.com/watch?v=a", thumbnail: "https://img/a.jpg" };
+  const videoB = { video_id: "b", title: "Beta", url: "https://youtube.com/watch?v=b" };
+
+  const draft = normalizeChannelDraft({
+    channelUrl: " https://youtube.com/@creator ",
+    channelName: "Creator",
+    videos: [videoA, null, { video_id: "broken" }, videoB],
+    selectedIds: ["b", "missing", "a", "b"],
+  });
+
+  assert.equal(draft.channelUrl, "https://youtube.com/@creator");
+  assert.equal(draft.channelName, "Creator");
+  assert.deepEqual(draft.videos, [videoA, videoB]);
+  assert.deepEqual([...draft.selectedIds], ["b", "a"]);
 });

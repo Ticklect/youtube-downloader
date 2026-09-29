@@ -4,6 +4,7 @@ import {
   canRetryFailed,
   canStartDownload,
   clearSelection,
+  normalizeChannelDraft,
   normalizeCurrentJobId,
   normalizePreferences,
   selectAllVideos,
@@ -37,6 +38,7 @@ const els = {
 const state = {
   helperOnline: false,
   dependencies: { yt_dlp: false, ffmpeg: false },
+  channelUrl: "",
   videos: [],
   channelName: "",
   selectedIds: new Set(),
@@ -90,10 +92,11 @@ function renderVideos() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = state.selectedIds.has(video.video_id);
-    checkbox.addEventListener("change", () => {
+    checkbox.addEventListener("change", async () => {
       if (checkbox.checked) state.selectedIds.add(video.video_id);
       else state.selectedIds.delete(video.video_id);
       refreshControls();
+      await savePreferences();
     });
 
     const image = document.createElement("img");
@@ -158,6 +161,10 @@ async function savePreferences() {
     quality: els.quality.value,
     folderPath: state.folderPath,
     currentJobId: state.currentJobId,
+    channelUrl: state.channelUrl,
+    channelName: state.channelName,
+    videos: state.videos,
+    selectedIds: [...state.selectedIds],
   });
 }
 
@@ -211,6 +218,7 @@ els.loadChannel.addEventListener("click", async () => {
 
   try {
     const result = await api.loadChannel(url);
+    state.channelUrl = url;
     state.videos = result.videos;
     state.channelName = result.channel_name;
     state.selectedIds = clearSelection();
@@ -218,6 +226,7 @@ els.loadChannel.addEventListener("click", async () => {
     els.videoSection.classList.remove("hidden");
     els.channelMessage.textContent = `${result.videos.length} public videos loaded.`;
     renderVideos();
+    await savePreferences();
   } catch (error) {
     els.channelMessage.textContent = "";
     showError(error.message);
@@ -233,6 +242,7 @@ els.channelUrl.addEventListener("keydown", (event) => {
 els.chooseFolder.addEventListener("click", async () => {
   showError();
   try {
+    await savePreferences();
     const result = await api.pickFolder();
     if (!result.cancelled && result.path) state.folderPath = result.path;
     await savePreferences();
@@ -242,14 +252,16 @@ els.chooseFolder.addEventListener("click", async () => {
   }
 });
 
-els.selectAll.addEventListener("click", () => {
+els.selectAll.addEventListener("click", async () => {
   state.selectedIds = selectAllVideos(state.videos);
   renderVideos();
+  await savePreferences();
 });
 
-els.clearAll.addEventListener("click", () => {
+els.clearAll.addEventListener("click", async () => {
   state.selectedIds = clearSelection();
   renderVideos();
+  await savePreferences();
 });
 
 for (const select of [els.mode, els.quality]) {
@@ -309,12 +321,33 @@ els.retryFailed.addEventListener("click", async () => {
 });
 
 async function initialize() {
-  const stored = await chrome.storage.local.get(["mode", "quality", "folderPath", "currentJobId"]);
+  const stored = await chrome.storage.local.get([
+    "mode",
+    "quality",
+    "folderPath",
+    "currentJobId",
+    "channelUrl",
+    "channelName",
+    "videos",
+    "selectedIds",
+  ]);
   const prefs = normalizePreferences(stored);
+  const draft = normalizeChannelDraft(stored);
   els.mode.value = prefs.mode;
   els.quality.value = prefs.quality;
   state.folderPath = typeof stored.folderPath === "string" ? stored.folderPath : "";
   state.currentJobId = normalizeCurrentJobId(stored.currentJobId);
+  state.channelUrl = draft.channelUrl;
+  state.channelName = draft.channelName;
+  state.videos = draft.videos;
+  state.selectedIds = draft.selectedIds;
+  els.channelUrl.value = draft.channelUrl;
+  if (draft.videos.length) {
+    els.channelName.textContent = draft.channelName || "Channel";
+    els.videoSection.classList.remove("hidden");
+    els.channelMessage.textContent = `${draft.videos.length} public videos loaded.`;
+    renderVideos();
+  }
   refreshControls();
 
   try {

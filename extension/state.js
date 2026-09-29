@@ -34,6 +34,31 @@ export function normalizePreferences(raw = {}) {
   };
 }
 
+export function normalizeChannelDraft(raw = {}) {
+  const videos = Array.isArray(raw.videos)
+    ? raw.videos.filter((video) => (
+      video
+      && typeof video.video_id === "string"
+      && typeof video.title === "string"
+      && typeof video.url === "string"
+    ))
+    : [];
+  const loadedIds = new Set(videos.map((video) => video.video_id));
+  const selectedIds = new Set();
+  if (Array.isArray(raw.selectedIds)) {
+    for (const id of raw.selectedIds) {
+      if (typeof id === "string" && loadedIds.has(id)) selectedIds.add(id);
+    }
+  }
+
+  return {
+    channelUrl: typeof raw.channelUrl === "string" ? raw.channelUrl.trim() : "",
+    channelName: typeof raw.channelName === "string" ? raw.channelName : "",
+    videos,
+    selectedIds,
+  };
+}
+
 export function summarizeProgress(job = {}) {
   const counts = { queued: 0, active: 0, completed: 0, skipped: 0, unavailable: 0, failed: 0 };
   for (const item of job.items || []) {
