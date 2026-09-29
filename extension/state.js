@@ -31,6 +31,7 @@ export function normalizePreferences(raw = {}) {
   return {
     mode: MODES.includes(raw.mode) ? raw.mode : "video",
     quality: QUALITIES.includes(raw.quality) ? raw.quality : "best",
+    autoStartHelper: raw.autoStartHelper === false ? false : true,
   };
 }
 

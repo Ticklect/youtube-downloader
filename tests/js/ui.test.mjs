@@ -57,8 +57,9 @@ test("current job id normalization keeps only non-empty strings", () => {
 });
 
 test("remembered preferences are normalized to supported values", () => {
-  assert.deepEqual(normalizePreferences({ mode: "audio", quality: "1080" }), { mode: "audio", quality: "1080" });
-  assert.deepEqual(normalizePreferences({ mode: "wat", quality: "4k" }), { mode: "video", quality: "best" });
+  assert.deepEqual(normalizePreferences({ mode: "audio", quality: "1080" }), { mode: "audio", quality: "1080", autoStartHelper: true });
+  assert.deepEqual(normalizePreferences({ mode: "wat", quality: "4k", autoStartHelper: false }), { mode: "video", quality: "best", autoStartHelper: false });
+  assert.deepEqual(normalizePreferences({ autoStartHelper: "false" }).autoStartHelper, true);
 });
 
 test("progress summary covers every terminal and active state", () => {
