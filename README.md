@@ -112,6 +112,8 @@ This leaves the downloader project, `.venv`, and your downloaded files in place.
 
 Use this tool only for content you own or otherwise have permission to download. It does not log in to YouTube, bypass private/member-only access, or circumvent DRM.
 
+**Legal notice:** This software is provided for lawful use only. Users are solely responsible for ensuring they have the necessary rights and permissions to download, store, or use any content. The developer does not authorize copyright infringement or circumvention of access controls and is not responsible for misuse of the software.
+
 ## License
 
 Licensed under the GNU Affero General Public License v3.0. See `LICENSE`.
