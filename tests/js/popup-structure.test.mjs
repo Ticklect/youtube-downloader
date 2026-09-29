@@ -6,6 +6,7 @@ import { access, readFile } from "node:fs/promises";
 const popupHtml = new URL("../../extension/popup.html", import.meta.url);
 const popupCss = new URL("../../extension/popup.css", import.meta.url);
 const popupJs = new URL("../../extension/popup.js", import.meta.url);
+const manifestJson = new URL("../../extension/manifest.json", import.meta.url);
 const downloaderHtml = new URL("../../extension/downloader.html", import.meta.url);
 const downloaderJs = new URL("../../extension/downloader.js", import.meta.url);
 const navigationJs = new URL("../../extension/navigation.js", import.meta.url);
@@ -109,6 +110,24 @@ test("popup uses a flat utility visual system instead of decorative AI-dashboard
   assert.doesNotMatch(css, /linear-gradient|radial-gradient|backdrop-filter/i);
   assert.doesNotMatch(css, /border-radius\s*:\s*999px/i);
   assert.doesNotMatch(html, /class=["'][^"']*brand-mark/);
+});
+
+
+test("extension declares real icon assets for Chrome surfaces", async () => {
+  const manifest = JSON.parse(await readFile(manifestJson, "utf8"));
+  const expected = {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png",
+  };
+
+  assert.deepEqual(manifest.icons, expected);
+  assert.deepEqual(manifest.action?.default_icon, expected);
+
+  for (const path of Object.values(expected)) {
+    await access(new URL(`../../extension/${path}`, import.meta.url));
+  }
 });
 
 
