@@ -14,6 +14,9 @@ export async function openOrFocusDownloader(chromeApi) {
 
   if (existing) {
     await chromeApi.tabs.update(existing.id, { active: true });
+    if (Number.isInteger(existing.windowId) && chromeApi.windows?.update) {
+      await chromeApi.windows.update(existing.windowId, { focused: true });
+    }
     return { action: "focused", tabId: existing.id };
   }
 

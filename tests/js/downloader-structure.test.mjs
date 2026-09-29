@@ -65,10 +65,10 @@ test("full downloader layout becomes single-column on narrow windows", async () 
 });
 
 
-test("full downloader keeps stale-job recovery behavior", async () => {
+test("full downloader routes polling and retry through shared stale-job recovery", async () => {
   const source = await readFile(downloaderJs, "utf8");
 
-  assert.match(source, /job_not_found/);
-  assert.match(source, /currentJobId\s*=\s*null/);
+  assert.match(source, /getJobOrRecover/);
+  assert.match(source, /retryJobOrRecover/);
   assert.match(source, /helper was restarted/i);
 });

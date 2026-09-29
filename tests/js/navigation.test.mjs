@@ -5,7 +5,7 @@ import { openOrFocusDownloader } from "../../extension/navigation.js";
 
 
 function makeChrome({ tabs = [], queryError = null } = {}) {
-  const calls = { query: [], update: [], create: [] };
+  const calls = { query: [], update: [], create: [], windowUpdate: [] };
   const targetUrl = "chrome-extension://test/downloader.html";
   const chromeApi = {
     runtime: {
@@ -27,6 +27,12 @@ function makeChrome({ tabs = [], queryError = null } = {}) {
       async create(createProperties) {
         calls.create.push(createProperties);
         return { id: 42, url: createProperties.url };
+      },
+    },
+    windows: {
+      async update(windowId, updateInfo) {
+        calls.windowUpdate.push([windowId, updateInfo]);
+        return { id: windowId };
       },
     },
   };
@@ -89,4 +95,18 @@ test("openOrFocusDownloader ignores unusable matching tabs", async () => {
   assert.deepEqual(calls.update, []);
   assert.deepEqual(calls.create, [{ url: targetUrl }]);
   assert.deepEqual(result, { action: "created", tabId: 42 });
+});
+
+
+test("openOrFocusDownloader focuses the window containing an existing downloader tab", async () => {
+  const targetUrl = "chrome-extension://test/downloader.html";
+  const { chromeApi, calls } = makeChrome({
+    tabs: [{ id: 8, windowId: 5, url: targetUrl }],
+  });
+
+  const result = await openOrFocusDownloader(chromeApi);
+
+  assert.deepEqual(calls.update, [[8, { active: true }]]);
+  assert.deepEqual(calls.windowUpdate, [[5, { focused: true }]]);
+  assert.deepEqual(result, { action: "focused", tabId: 8 });
 });

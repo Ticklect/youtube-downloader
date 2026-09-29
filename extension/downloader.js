@@ -1,4 +1,5 @@
 import * as api from "./api.js";
+import { getJobOrRecover, retryJobOrRecover } from "./job-lifecycle.js";
 import {
   canStartDownload,
   clearSelection,
@@ -159,11 +160,22 @@ async function savePreferences() {
   });
 }
 
+async function recoverMissingJob() {
+  if (state.pollTimer) clearTimeout(state.pollTimer);
+  state.currentJobId = null;
+  state.downloading = false;
+  state.pollTimer = null;
+  await savePreferences();
+  showError("The previous job is no longer available because the helper was restarted.");
+  refreshControls();
+}
+
 async function pollJob() {
   if (!state.currentJobId) return;
 
   try {
-    const job = await api.getJob(state.currentJobId);
+    const job = await getJobOrRecover(api, state.currentJobId, recoverMissingJob);
+    if (!job) return;
     renderJob(job);
 
     if (job.status === "completed") {
@@ -283,7 +295,8 @@ els.retryFailed.addEventListener("click", async () => {
   try {
     state.downloading = true;
     refreshControls();
-    const result = await api.retryJob(state.currentJobId);
+    const result = await retryJobOrRecover(api, state.currentJobId, recoverMissingJob);
+    if (!result) return;
     state.currentJobId = result.job_id;
     await savePreferences();
     await pollJob();
@@ -320,19 +333,11 @@ async function initialize() {
     state.folderPath = folder.path || "";
 
     if (state.currentJobId) {
-      try {
-        const job = await api.getJob(state.currentJobId);
+      const job = await getJobOrRecover(api, state.currentJobId, recoverMissingJob);
+      if (job) {
         renderJob(job);
         state.downloading = job.status !== "completed";
         if (state.downloading) state.pollTimer = setTimeout(pollJob, 250);
-      } catch (jobError) {
-        if (jobError.code === "job_not_found") {
-          state.currentJobId = null;
-          state.downloading = false;
-          showError("The previous job is no longer available because the helper was restarted.");
-        } else {
-          throw jobError;
-        }
       }
     }
 
