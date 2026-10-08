@@ -11,6 +11,21 @@ A Chrome extension for saving videos from a public YouTube channel to your Windo
 - Choose video quality: **360p**, **720p**, **1080p** or **Best available**, depending on what's available.
 - Choose a folder, track progress and retry failed downloads.
 
+## Screenshots
+
+The extension popup in **Red** and **Mono** themes. Click an image to view it at full size.
+
+<p align="center">
+  <a href="docs/screenshots/red-theme.png"><img src="docs/screenshots/red-theme.png" alt="YouTube Downloader popup in Red theme showing channel videos" width="315"></a>
+  <a href="docs/screenshots/mono-theme.png"><img src="docs/screenshots/mono-theme.png" alt="YouTube Downloader popup in Mono theme showing channel videos" width="315"></a>
+</p>
+
+Choose between Video, Audio (MP3), Transcript and Everything, with quality controls for video downloads.
+
+<p align="center">
+  <a href="docs/screenshots/output-options.png"><img src="docs/screenshots/output-options.png" alt="Download destination, output format menu and quality selector" width="400"></a>
+</p>
+
 ## Install
 
 You need **Chrome**, **Python 3.11+** and **FFmpeg** on Windows. You can install FFmpeg with `winget install Gyan.FFmpeg` (then reopen PowerShell).
