@@ -100,7 +100,17 @@ try {
     }
     Move-Item -LiteralPath $TempArchive -Destination $Archive -ErrorAction Stop
     Write-Host "Release archive ready: $Archive"
-    Write-Host "SHA256: $((Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash)"
+    # Use .NET rather than Get-FileHash: some Windows PowerShell runners do not
+    # expose that cmdlet even though the release ZIP was built successfully.
+    $HashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+    $HashStream = [System.IO.File]::OpenRead($Archive)
+    try {
+        $HashBytes = $HashAlgorithm.ComputeHash($HashStream)
+        Write-Host "SHA256: $([System.BitConverter]::ToString($HashBytes).Replace('-', ''))"
+    } finally {
+        $HashStream.Dispose()
+        $HashAlgorithm.Dispose()
+    }
 } finally {
     $CanonicalStage = [System.IO.Path]::GetFullPath($Staging)
     if (Test-Path -LiteralPath $CanonicalStage) {

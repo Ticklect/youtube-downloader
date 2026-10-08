@@ -1,6 +1,7 @@
 """Windows release packaging checks, using isolated output directories."""
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -67,6 +68,7 @@ def test_release_archive_is_complete_and_runs_from_clean_extraction(tmp_path):
     version = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))["version"]
     archive = output / f"YouTube-Downloader-v{version}.zip"
     assert archive.is_file(), built.stdout
+    assert f"SHA256: {hashlib.sha256(archive.read_bytes()).hexdigest().upper()}" in built.stdout
     assert _archive_files(archive) == _expected_files()
 
     extracted = tmp_path / "extracted"
