@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import asdict
+import hashlib
+import json
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from flask import Flask, jsonify, make_response, request
 
@@ -12,33 +15,57 @@ from .jobs import DownloadRequest, JobManager
 from .settings import SettingsStore, pick_download_root
 
 PORT = 17865
+ALLOWED_HOSTS = {"127.0.0.1", f"127.0.0.1:{PORT}", "localhost", f"localhost:{PORT}"}
 ALLOWED_METHODS = "GET, POST, OPTIONS"
 ALLOWED_HEADERS = "Content-Type, X-YCD-Client"
 MODES = {"video", "audio", "transcript", "everything"}
 QUALITIES = {"360", "720", "1080", "best"}
+MANIFEST_PATH = Path(__file__).resolve().parents[1] / "extension" / "manifest.json"
+
+
+def _chromium_extension_id(manifest_key: str) -> str:
+    digest = hashlib.sha256(base64.b64decode(manifest_key)).digest()[:16]
+    return "".join(chr(ord("a") + nibble) for byte in digest for nibble in (byte >> 4, byte & 0x0F))
+
+
+def _extension_origin() -> str:
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest_key = manifest.get("key")
+    if not isinstance(manifest_key, str) or not manifest_key:
+        raise RuntimeError("Extension manifest key is missing.")
+    return f"chrome-extension://{_chromium_extension_id(manifest_key)}"
+
+
+EXTENSION_ORIGIN = _extension_origin()
 
 
 def _valid_extension_origin(origin: str | None) -> bool:
-    if not origin:
-        return False
-    parsed = urlparse(origin)
-    return parsed.scheme == "chrome-extension" and bool(parsed.netloc) and not parsed.path.strip("/")
+    return origin == EXTENSION_ORIGIN
 
 
 def _error(code: str, message: str, status: int):
     return jsonify({"error": {"code": code, "message": message}}), status
 
 
-def _youtube_video_url(url: object) -> bool:
+def _youtube_video_id(url: object) -> str | None:
     if not isinstance(url, str):
-        return False
+        return None
     parsed = urlparse(url)
-    return parsed.scheme in {"http", "https"} and (parsed.hostname or "").lower() in {
-        "youtube.com",
-        "www.youtube.com",
-        "m.youtube.com",
-        "youtu.be",
-    }
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    host = (parsed.hostname or "").lower()
+    if host == "youtu.be":
+        video_id = parsed.path.strip("/").split("/", 1)[0]
+        return video_id or None
+    if host not in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+        return None
+    if parsed.path.rstrip("/") == "/watch":
+        values = parse_qs(parsed.query).get("v") or []
+        return values[0].strip() if values and values[0].strip() else None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) == 2 and parts[0] in {"shorts", "embed", "live"}:
+        return parts[1]
+    return None
 
 
 def create_app(
@@ -51,12 +78,16 @@ def create_app(
 ) -> Flask:
     app = Flask(__name__)
     store = settings_store or SettingsStore()
-    jobs = job_manager or JobManager(max_workers=2)
+    jobs = job_manager or JobManager()
 
     @app.before_request
     def security_gate():
+        # Reject DNS-rebinding requests before the originless health probe.
+        # Browsers still send the attacker's domain in Host after DNS resolves to loopback.
+        if request.host not in ALLOWED_HOSTS:
+            return _error("invalid_host", "Requests must target the local downloader host.", 403)
         origin = request.headers.get("Origin")
-        if request.method == "GET" and not origin:
+        if request.method == "GET" and request.path == "/health" and not origin:
             return None
         if not _valid_extension_origin(origin):
             return _error("extension_origin_required", "Requests must come from the Chrome extension.", 403)
@@ -144,7 +175,10 @@ def create_app(
             video_url = item.get("url")
             title = item.get("title")
             channel_name = item.get("channel_name")
-            if not all(isinstance(value, str) and value.strip() for value in [video_id, title, channel_name]) or not _youtube_video_url(video_url):
+            if not all(isinstance(value, str) and value.strip() for value in [video_id, title, channel_name]):
+                return _error("invalid_video", "Each video must contain a valid YouTube URL, ID, title, and channel name.", 400)
+            canonical_id = _youtube_video_id(video_url)
+            if canonical_id is None or canonical_id != video_id.strip():
                 return _error("invalid_video", "Each video must contain a valid YouTube URL, ID, title, and channel name.", 400)
             requests.append(
                 DownloadRequest(

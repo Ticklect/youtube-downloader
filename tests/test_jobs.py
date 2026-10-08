@@ -84,11 +84,47 @@ def test_unknown_job_id_is_rejected(tmp_path):
         jobs.JobManager().get_job("missing")
 
 
+def test_default_job_manager_allows_four_parallel_downloads(monkeypatch, tmp_path):
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    four_started = threading.Event()
+    release = threading.Event()
+
+    def fake_download(req, root, progress_cb):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active >= 4:
+                four_started.set()
+        assert release.wait(1.0)
+        with lock:
+            active -= 1
+        return jobs.ItemResult("completed")
+
+    monkeypatch.setattr(jobs, "download_item", fake_download)
+    manager = jobs.JobManager()
+    job_id = manager.create_job([request(str(index)) for index in range(4)], tmp_path)
+
+    assert four_started.wait(1.0)
+    release.set()
+    wait_done(manager, job_id)
+
+    assert manager.max_workers == 4
+    assert peak == 4
+
+
 def test_download_item_skips_when_requested_artifact_is_already_archived(monkeypatch, tmp_path):
+    req = request("abc")
+    output_dir = downloader.build_video_dir(tmp_path, req.channel_name, req.title, req.video_id)
+    output_dir.mkdir(parents=True)
+    (output_dir / "video.mp4").write_bytes(b"video")
     ArtifactArchives(tmp_path).mark_complete("video", "abc")
+    ArtifactArchives(tmp_path).set_video_quality("abc", req.quality, output_dir / "video.mp4")
     monkeypatch.setattr("helper.downloader.YoutubeDL", lambda *_: (_ for _ in ()).throw(AssertionError("must not download")))
 
-    result = download_item(request("abc"), tmp_path, lambda update: None)
+    result = download_item(req, tmp_path, lambda update: None)
 
     assert result.state == "skipped"
 
@@ -123,6 +159,9 @@ def test_overlapping_downloads_claim_same_artifact_once(monkeypatch, tmp_path):
             calls += 1
         started.set()
         assert release.wait(1.0)
+        output_dir = downloader.build_video_dir(root, req.channel_name, req.title, req.video_id)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "video.mp4").write_bytes(b"video")
 
     monkeypatch.setattr(downloader, "_run_yt_dlp", fake_run)
     req = request("same")

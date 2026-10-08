@@ -8,13 +8,17 @@
 </head>
 <body>
   <main class="shell">
+    <div class="popup-content">
     <header class="topbar">
-      <div class="title-block">
-        <h1>Channel Downloader</h1>
-        <p>Save selected videos from a YouTube channel.</p>
+      <div class="app-heading">
+        <img class="app-icon" src="icons/icon32.png" alt="" width="32" height="32">
+        <div class="title-block">
+          <h1>YouTube Downloader</h1>
+          <p>Browse channels. Save what you choose.</p>
+        </div>
       </div>
       <div class="header-tools">
-        <span id="helperStatus" class="status status-offline">Helper Off</span>
+        <span id="helperStatus" class="status status-offline" role="status" aria-live="polite">Helper Off</span>
         <div class="theme-switch" role="group" aria-label="Appearance theme">
           <button id="themeRed" class="theme-option" type="button" aria-pressed="true">Red</button>
           <button id="themeMono" class="theme-option" type="button" aria-pressed="false">Mono</button>
@@ -37,9 +41,9 @@
     </section>
 
     <section class="source-section utility-section">
-      <label class="field-label" for="channelUrl">Channel URL</label>
+      <label class="field-label" for="channelUrl">Channel URL <span class="field-hint">Paste a channel link to find its videos</span></label>
       <div class="input-row">
-        <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off" spellcheck="false">
+        <input id="channelUrl" type="url" placeholder="https://youtube.com/@channel" autocomplete="off" spellcheck="false" aria-describedby="channelMessage">
         <button id="loadChannel" class="primary" type="button">Load channel</button>
       </div>
       <p id="channelMessage" class="message" aria-live="polite"></p>
@@ -50,7 +54,10 @@
     <section id="videoSection" class="video-section hidden">
       <div class="video-header">
         <div class="video-heading">
-          <h2 id="channelName">Channel</h2>
+          <div class="video-title-stack">
+            <span class="section-kicker">Videos</span>
+            <h2 id="channelName">Channel</h2>
+          </div>
           <span id="selectionCount" class="selection-count">0 selected</span>
         </div>
         <div class="video-actions">
@@ -58,13 +65,17 @@
           <button id="clearAll" class="text-button" type="button">Clear</button>
         </div>
       </div>
+      <div class="video-filter">
+        <input id="videoSearch" type="search" placeholder="Search video titles" aria-label="Search loaded videos" autocomplete="off">
+        <span id="visibleCount" class="visible-count" aria-live="polite"></span>
+      </div>
       <div id="videoList" class="video-list"></div>
     </section>
 
     <section class="settings-row" aria-label="Download settings">
       <div class="setting-cell folder-cell">
-        <span class="setting-label">Save to</span>
-        <strong id="folderPath">No folder selected</strong>
+        <span class="setting-label">Destination</span>
+        <strong id="folderPath" aria-live="polite">No folder selected</strong>
         <button id="chooseFolder" class="text-button choose-folder" type="button">Choose folder</button>
       </div>
 
@@ -89,18 +100,21 @@
       </label>
     </section>
 
-    <section id="progressPanel" class="progress-panel hidden">
+    <section id="progressPanel" class="progress-panel hidden" aria-label="Download progress">
       <div class="progress-header">
         <strong>Download progress</strong>
-        <span id="progressSummary" class="muted"></span>
+        <span id="progressSummary" class="muted" role="status" aria-live="polite"></span>
       </div>
       <div id="jobItems" class="job-list"></div>
     </section>
 
-    <section class="download-bar">
+    <footer>Download only content you own or have permission to save.</footer>
+    </div>
+
+    <section class="download-bar" aria-label="Download actions">
       <div class="download-copy">
         <strong id="downloadSummary">Ready</strong>
-        <span>Only selected videos will be downloaded.</span>
+        <span>Only your selected videos are included.</span>
       </div>
       <div class="download-actions">
         <button id="retryFailed" class="secondary hidden" type="button">Retry failed</button>
@@ -108,7 +122,6 @@
       </div>
     </section>
 
-    <footer>Download only content you own or have permission to save.</footer>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

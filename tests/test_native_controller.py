@@ -9,6 +9,16 @@ from native_host.controller import ControllerError, HelperController, probe_help
 class FakePopen:
     def __init__(self, pid=4242):
         self.pid = pid
+        self.terminated = False
+        self.killed = False
+    def terminate(self):
+        self.terminated = True
+    def kill(self):
+        self.killed = True
+    def poll(self):
+        return 0 if self.terminated or self.killed else None
+    def wait(self, timeout=None):
+        return 0
 
 
 class FakeProcess:
@@ -203,6 +213,45 @@ def test_stop_terminates_only_verified_owned_helper(tmp_path):
     assert not controller.state_path.exists()
 
 
+def test_start_state_save_failure_terminates_newly_spawned_process(tmp_path, monkeypatch):
+    repo, python = make_repo(tmp_path)
+    process = matching_process(python)
+    child = FakePopen(process.pid)
+    controller = HelperController(
+        repo,
+        tmp_path / "control",
+        health_probe=lambda: False,
+        popen_factory=lambda *a, **k: child,
+        process_factory=lambda pid: process,
+    )
+    monkeypatch.setattr(controller, "_save_state", lambda state: (_ for _ in ()).throw(OSError("locked")))
+
+    with pytest.raises(ControllerError, match="Could not start helper") as exc_info:
+        controller.start()
+
+    assert exc_info.value.code == "start_failed"
+    assert process.terminated is True
+    assert not controller.state_path.exists()
+
+
+def test_start_process_lookup_failure_terminates_spawned_child(tmp_path):
+    repo, _ = make_repo(tmp_path)
+    child = FakePopen()
+    controller = HelperController(
+        repo,
+        tmp_path / "control",
+        health_probe=lambda: False,
+        popen_factory=lambda *a, **k: child,
+        process_factory=lambda pid: (_ for _ in ()).throw(ProcessLookupError(pid)),
+    )
+
+    with pytest.raises(ControllerError, match="Could not start helper"):
+        controller.start()
+
+    assert child.terminated is True
+    assert not controller.state_path.exists()
+
+
 def test_stop_terminates_verified_helper_descendant_before_launcher(tmp_path):
     repo, python = make_repo(tmp_path)
     config = tmp_path / "control"
@@ -280,3 +329,57 @@ def test_duplicate_start_waits_for_existing_owned_process_instead_of_spawning(tm
     result = controller.start()
     assert result["healthy"] is True and result["owned"] is True
     assert spawned == []
+
+
+def test_prepare_uninstall_stops_verified_owned_helper(tmp_path):
+    repo, python = make_repo(tmp_path)
+    config = tmp_path / "control"
+    process = matching_process(python)
+    write_state(config, process)
+    controller = HelperController(
+        repo,
+        config,
+        health_probe=lambda: process.is_running(),
+        process_factory=lambda pid: process,
+        sleep=lambda _: None,
+    )
+
+    result = controller.prepare_uninstall()
+
+    assert result == {"ok": True, "stopped": True}
+    assert process.terminated is True
+    assert not controller.state_path.exists()
+
+
+def test_prepare_uninstall_refuses_healthy_unverified_process(tmp_path):
+    repo, _ = make_repo(tmp_path)
+    controller = HelperController(repo, tmp_path / "control", health_probe=lambda: True)
+
+    with pytest.raises(ControllerError, match="ownership could not be verified") as exc_info:
+        controller.prepare_uninstall()
+
+    assert exc_info.value.code == "ownership_unverified"
+
+
+def test_prepare_uninstall_never_terminates_identity_mismatch(tmp_path):
+    repo, python = make_repo(tmp_path)
+    config = tmp_path / "control"
+    expected = matching_process(python)
+    write_state(config, expected)
+    unrelated = FakeProcess(
+        expected.pid,
+        create_time=expected.create_time() + 50,
+        exe=str(python),
+        cmdline=[str(python), "-m", "helper.app"],
+    )
+    controller = HelperController(
+        repo,
+        config,
+        health_probe=lambda: True,
+        process_factory=lambda pid: unrelated,
+    )
+
+    with pytest.raises(ControllerError, match="ownership could not be verified"):
+        controller.prepare_uninstall()
+
+    assert unrelated.terminated is False

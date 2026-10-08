@@ -13,11 +13,23 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not (Test-Path $Venv)) {
     python -m venv $Venv
+    if ($LASTEXITCODE -ne 0) {
+        throw "Setup incomplete: could not create Python virtual environment."
+    }
 }
 
 $Python = Join-Path $Venv "Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $Python)) {
+    throw "Setup incomplete: virtual environment Python executable is missing."
+}
 & $Python -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) {
+    throw "Setup incomplete: could not update pip."
+}
 & $Python -m pip install -r (Join-Path $Root "helper\requirements.txt")
+if ($LASTEXITCODE -ne 0) {
+    throw "Setup incomplete: Python dependency installation failed."
+}
 
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Warning "FFmpeg is not on PATH. Install FFmpeg before downloading video/audio."

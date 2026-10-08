@@ -10,10 +10,11 @@ from .downloader import DownloadRequest, ItemResult, download_item
 
 
 ITEM_STATES = ("queued", "active", "completed", "skipped", "unavailable", "failed")
+DEFAULT_MAX_WORKERS = 4
 
 
 class JobManager:
-    def __init__(self, max_workers: int = 2):
+    def __init__(self, max_workers: int = DEFAULT_MAX_WORKERS):
         self.max_workers = max_workers
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._jobs: dict[str, dict] = {}

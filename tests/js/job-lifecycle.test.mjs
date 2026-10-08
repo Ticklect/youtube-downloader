@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getJobOrRecover, retryJobOrRecover } from "../../extension/job-lifecycle.js";
+import { getJobOrRecover, recoverHelperForPolling, retryJobOrRecover } from "../../extension/job-lifecycle.js";
 
 
 function missingJobError() {
@@ -58,4 +58,19 @@ test("job lifecycle helpers rethrow non-missing helper errors", async () => {
 
   await assert.rejects(() => getJobOrRecover(api, "job", async () => {}), transportError);
   await assert.rejects(() => retryJobOrRecover(api, "job", async () => {}), transportError);
+});
+
+test("poll recovery auto-starts only when auto-start mode is enabled", async () => {
+  let starts = 0;
+  const ensureReady = async () => {
+    starts += 1;
+    return { health: { service: "youtube-channel-downloader", ok: true } };
+  };
+
+  assert.equal(await recoverHelperForPolling({ autoStartHelper: false, ensureReady }), null);
+  assert.equal(starts, 0);
+
+  const result = await recoverHelperForPolling({ autoStartHelper: true, ensureReady });
+  assert.equal(starts, 1);
+  assert.equal(result.health.ok, true);
 });

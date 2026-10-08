@@ -1,10 +1,14 @@
 import * as api from "./api.js";
-import { getJobOrRecover, retryJobOrRecover } from "./job-lifecycle.js";
+import { getJobOrRecover, recoverHelperForPolling, retryJobOrRecover } from "./job-lifecycle.js";
 import { ensureHelperReady, requireHelperStopped, sendControlCommand, waitForHelper } from "./helper-control.js";
+import { createStorageQueue } from "./storage-queue.js";
 import {
   canRetryFailed,
+  canLoadChannel,
   canStartDownload,
+  canToggleHelper,
   clearSelection,
+  matchingVideoIds,
   normalizeChannelDraft,
   normalizeCurrentJobId,
   normalizePreferences,
@@ -30,6 +34,8 @@ const els = {
   channelName: $("channelName"),
   selectionCount: $("selectionCount"),
   videoList: $("videoList"),
+  videoSearch: $("videoSearch"),
+  visibleCount: $("visibleCount"),
   selectAll: $("selectAll"),
   clearAll: $("clearAll"),
   mode: $("mode"),
@@ -61,6 +67,8 @@ const state = {
   currentJobId: null,
   pollTimer: null,
 };
+const queueStorageWrite = createStorageQueue((snapshot) => chrome.storage.local.set(snapshot));
+let renderedJobId = null;
 
 function applyTheme(theme) {
   state.theme = theme;
@@ -136,10 +144,10 @@ function refreshControls() {
       ? `Download ${selectedCount} video${selectedCount === 1 ? "" : "s"}`
       : "Download selected";
   els.quality.disabled = !["video", "everything"].includes(els.mode.value);
-  els.loadChannel.disabled = state.channelLoading || Boolean(state.helperTransition) || !helperCanStart || (state.helperOnline && !state.dependencies.yt_dlp);
+  els.loadChannel.disabled = !canLoadChannel({ ...state, helperCanStart });
   els.chooseFolder.disabled = Boolean(state.helperTransition) || !helperCanStart;
   els.autoStartHelper.checked = state.autoStartHelper;
-  els.helperToggle.disabled = Boolean(state.helperTransition) || state.downloading || !state.helperControlAvailable;
+  els.helperToggle.disabled = !canToggleHelper(state);
   els.helperToggle.textContent = state.helperTransition === "starting"
     ? "Starting…"
     : state.helperTransition === "stopping"
@@ -161,6 +169,23 @@ function refreshControls() {
   }
 }
 
+function updateVideoFilter() {
+  const query = els.videoSearch?.value.trim().toLocaleLowerCase() || "";
+  let matches = 0;
+  for (const row of els.videoList.children) {
+    const visible = !query || row.dataset.search.includes(query);
+    row.classList.toggle("hidden", !visible);
+    if (visible) matches += 1;
+  }
+  if (els.visibleCount) {
+    els.visibleCount.textContent = query
+      ? `${matches} of ${state.videos.length} shown`
+      : `${state.videos.length} videos`;
+  }
+  els.selectAll.textContent = query ? "Select matches" : "Select all";
+  els.clearAll.textContent = query ? "Clear matches" : "Clear";
+}
+
 function renderVideos() {
   els.videoList.textContent = "";
   const fragment = document.createDocumentFragment();
@@ -168,6 +193,7 @@ function renderVideos() {
   for (const video of state.videos) {
     const row = document.createElement("label");
     row.className = "video-card";
+    row.dataset.search = `${video.title} ${video.video_id}`.toLocaleLowerCase();
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -176,7 +202,7 @@ function renderVideos() {
       if (checkbox.checked) state.selectedIds.add(video.video_id);
       else state.selectedIds.delete(video.video_id);
       refreshControls();
-      await savePreferences();
+      await saveSelection();
     });
 
     const image = document.createElement("img");
@@ -203,6 +229,7 @@ function renderVideos() {
   }
 
   els.videoList.append(fragment);
+  updateVideoFilter();
   refreshControls();
 }
 
@@ -210,33 +237,43 @@ function renderJob(job) {
   const summary = summarizeProgress(job);
   els.progressPanel.classList.remove("hidden");
   els.progressSummary.textContent = `${summary.done}/${summary.total} done · ${summary.failed} failed`;
-  els.jobItems.textContent = "";
+  const items = job.items || [];
+  if (renderedJobId !== job.id || els.jobItems.childElementCount !== items.length) {
+    els.jobItems.textContent = "";
+    const fragment = document.createDocumentFragment();
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "job-item";
+      const title = document.createElement("div");
+      title.className = "job-item-title";
+      title.textContent = item.title;
+      const status = document.createElement("div");
+      status.className = "job-state";
+      row.append(title, status);
+      fragment.append(row);
+    }
+    els.jobItems.append(fragment);
+    renderedJobId = job.id;
+  }
 
-  for (const item of job.items || []) {
-    const row = document.createElement("div");
-    row.className = "job-item";
-
-    const title = document.createElement("div");
-    title.className = "job-item-title";
-    title.textContent = item.title;
-
-    const status = document.createElement("div");
-    status.className = "job-state";
+  for (const [index, item] of items.entries()) {
+    const row = els.jobItems.children[index];
+    const title = row.firstElementChild;
+    const status = row.lastElementChild;
+    if (title.textContent !== item.title) title.textContent = item.title;
     const percent = item.state === "active" && Number.isFinite(item.percent)
       ? ` ${Math.round(item.percent)}%`
       : "";
-    status.textContent = item.state + percent;
-    status.title = item.message || "";
-
-    row.append(title, status);
-    els.jobItems.append(row);
+    const nextStatus = item.state + percent;
+    if (status.textContent !== nextStatus) status.textContent = nextStatus;
+    if (status.title !== (item.message || "")) status.title = item.message || "";
   }
 
   els.retryFailed.classList.toggle("hidden", !canRetryFailed(job, state.downloading));
 }
 
-async function savePreferences() {
-  await chrome.storage.local.set({
+function savePreferences() {
+  return queueStorageWrite({
     mode: els.mode.value,
     quality: els.quality.value,
     autoStartHelper: state.autoStartHelper,
@@ -248,6 +285,10 @@ async function savePreferences() {
     videos: state.videos,
     selectedIds: [...state.selectedIds],
   });
+}
+
+function saveSelection() {
+  return queueStorageWrite({ selectedIds: [...state.selectedIds] });
 }
 
 async function requireHelper(actionName) {
@@ -317,30 +358,80 @@ async function recoverMissingJob() {
   refreshControls();
 }
 
+function clearStaleCompletedJob() {
+  if (state.downloading) return;
+  if (state.pollTimer) clearTimeout(state.pollTimer);
+  state.currentJobId = null;
+  state.pollTimer = null;
+  els.progressPanel.classList.add("hidden");
+  els.retryFailed.classList.add("hidden");
+  els.progressSummary.textContent = "";
+  els.jobItems.textContent = "";
+  renderedJobId = null;
+}
+
+async function restoreHelperAfterSuccessfulPoll() {
+  if (state.helperOnline) return;
+  try {
+    const health = await api.health();
+    applyHealth(health);
+  } catch {
+    // The job response is authoritative for lifecycle progress; keep retrying health later.
+  }
+}
+
+async function recoverHelperAfterPollFailure() {
+  try {
+    const result = await recoverHelperForPolling({
+      autoStartHelper: state.autoStartHelper,
+      ensureReady: () => ensureHelperReady({
+        api,
+        chromeApi: chrome,
+        autoStart: true,
+      }),
+    });
+    if (!result) return false;
+    if (!applyHealth(result.health)) return false;
+    if (result.started) {
+      state.helperControlAvailable = true;
+      state.helperOwned = true;
+    }
+    refreshControls();
+    return true;
+  } catch (error) {
+    if (error?.code === "native_host_missing") state.helperControlAvailable = false;
+    markHelperOff();
+    refreshControls();
+    return false;
+  }
+}
+
 async function pollJob() {
   if (!state.currentJobId) return;
 
   try {
     const job = await getJobOrRecover(api, state.currentJobId, recoverMissingJob);
     if (!job) return;
+    await restoreHelperAfterSuccessfulPoll();
+    showError();
     renderJob(job);
 
     if (job.status === "completed") {
       state.downloading = false;
       state.pollTimer = null;
       refreshControls();
-      renderJob(job);
       return;
     }
 
     state.pollTimer = setTimeout(pollJob, 1000);
   } catch (error) {
     state.helperOnline = false;
-    state.downloading = false;
-    state.pollTimer = null;
+    state.downloading = true;
     setHelperStatus("offline");
     showError(error.message);
     refreshControls();
+    await recoverHelperAfterPollFailure();
+    state.pollTimer = setTimeout(pollJob, 1000);
   }
 }
 
@@ -357,6 +448,8 @@ els.loadChannel.addEventListener("click", async () => {
   state.channelName = "";
   state.videos = [];
   state.selectedIds = clearSelection();
+  if (els.videoSearch) els.videoSearch.value = "";
+  clearStaleCompletedJob();
   els.channelName.textContent = "Channel";
   els.videoList.textContent = "";
   els.videoSection.classList.add("hidden");
@@ -377,7 +470,9 @@ els.loadChannel.addEventListener("click", async () => {
     state.selectedIds = clearSelection();
     els.channelName.textContent = result.channel_name;
     els.videoSection.classList.remove("hidden");
-    els.channelMessage.textContent = `${result.videos.length} public videos loaded.`;
+    els.channelMessage.textContent = result.videos.length >= 200
+      ? "Loaded the newest 200 public videos (current limit)."
+      : `${result.videos.length} public videos loaded.`;
     renderVideos();
     await savePreferences();
   } catch (error) {
@@ -392,6 +487,8 @@ els.loadChannel.addEventListener("click", async () => {
 els.channelUrl.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !els.loadChannel.disabled) els.loadChannel.click();
 });
+
+els.videoSearch?.addEventListener("input", updateVideoFilter);
 
 els.chooseFolder.addEventListener("click", async () => {
   showError();
@@ -409,15 +506,23 @@ els.chooseFolder.addEventListener("click", async () => {
 });
 
 els.selectAll.addEventListener("click", async () => {
-  state.selectedIds = selectAllVideos(state.videos);
+  const query = els.videoSearch?.value || "";
+  state.selectedIds = query.trim()
+    ? new Set([...state.selectedIds, ...matchingVideoIds(state.videos, query)])
+    : selectAllVideos(state.videos);
   renderVideos();
-  await savePreferences();
+  await saveSelection();
 });
 
 els.clearAll.addEventListener("click", async () => {
-  state.selectedIds = clearSelection();
+  const query = els.videoSearch?.value || "";
+  if (query.trim()) {
+    for (const id of matchingVideoIds(state.videos, query)) state.selectedIds.delete(id);
+  } else {
+    state.selectedIds = clearSelection();
+  }
   renderVideos();
-  await savePreferences();
+  await saveSelection();
 });
 
 for (const select of [els.mode, els.quality]) {
@@ -445,7 +550,7 @@ els.autoStartHelper.addEventListener("change", async () => {
 
 els.helperToggle.addEventListener("click", async () => {
   showError();
-  if (state.downloading) {
+  if (state.downloading && state.helperOnline) {
     showError("Wait for the current download to finish before turning the helper off.");
     return;
   }
@@ -574,7 +679,9 @@ async function initialize() {
   if (draft.videos.length) {
     els.channelName.textContent = draft.channelName || "Channel";
     els.videoSection.classList.remove("hidden");
-    els.channelMessage.textContent = `${draft.videos.length} public videos loaded.`;
+    els.channelMessage.textContent = draft.videos.length >= 200
+      ? "Loaded the newest 200 public videos (current limit)."
+      : `${draft.videos.length} public videos loaded.`;
     renderVideos();
   }
   refreshControls();

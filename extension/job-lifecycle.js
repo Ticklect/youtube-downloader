@@ -15,3 +15,8 @@ export function getJobOrRecover(api, jobId, onMissing) {
 export function retryJobOrRecover(api, jobId, onMissing) {
   return runJobRequest(() => api.retryJob(jobId), onMissing);
 }
+
+export async function recoverHelperForPolling({ autoStartHelper, ensureReady }) {
+  if (!autoStartHelper) return null;
+  return ensureReady();
+}

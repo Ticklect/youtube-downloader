@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  canLoadChannel,
   canRetryFailed,
   canStartDownload,
+  canToggleHelper,
   clearSelection,
   normalizeChannelDraft,
   normalizeCurrentJobId,
@@ -33,6 +35,36 @@ test("download stays disabled without folder selection or helper connectivity", 
   assert.equal(canStartDownload({ ...base, selectedIds: new Set() }), false);
   assert.equal(canStartDownload({ ...base, helperOnline: false }), false);
   assert.equal(canStartDownload({ ...base, downloading: true }), false);
+});
+
+test("channel loading stays disabled while a job is active or unresolved", () => {
+  const base = {
+    channelLoading: false,
+    downloading: false,
+    helperTransition: null,
+    helperOnline: true,
+    helperCanStart: true,
+    dependencies: { yt_dlp: true, ffmpeg: true },
+  };
+
+  assert.equal(canLoadChannel(base), true);
+  assert.equal(canLoadChannel({ ...base, downloading: true }), false);
+  assert.equal(canLoadChannel({ ...base, channelLoading: true }), false);
+  assert.equal(canLoadChannel({ ...base, helperTransition: "starting" }), false);
+});
+
+test("helper toggle allows recovery start while offline but blocks stop during unresolved job", () => {
+  const base = {
+    helperTransition: null,
+    downloading: true,
+    helperOnline: false,
+    helperControlAvailable: true,
+  };
+
+  assert.equal(canToggleHelper(base), true);
+  assert.equal(canToggleHelper({ ...base, helperOnline: true }), false);
+  assert.equal(canToggleHelper({ ...base, helperTransition: "starting" }), false);
+  assert.equal(canToggleHelper({ ...base, helperControlAvailable: false }), false);
 });
 
 test("dependency capabilities allow transcript without ffmpeg but block media", () => {

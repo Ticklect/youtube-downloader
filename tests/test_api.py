@@ -4,10 +4,10 @@ from unittest.mock import patch
 from helper.channel import ChannelResult, VideoInfo
 from helper.dependencies import DependencyStatus
 from helper.settings import SettingsStore
-from helper.app import create_app
+from helper.app import EXTENSION_ORIGIN, create_app
 
 
-ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+ORIGIN = EXTENSION_ORIGIN
 HEADERS = {"Origin": ORIGIN, "X-YCD-Client": "1"}
 
 
@@ -48,6 +48,43 @@ def test_health_allows_originless_get_but_rejects_web_origin(tmp_path):
     assert response.status_code == 200
     assert response.get_json()["service"] == "youtube-channel-downloader"
     assert response.get_json()["dependencies"] == {"yt_dlp": True, "ffmpeg": False, "messages": ["FFmpeg missing"]}
+
+
+def test_rejects_dns_rebinding_host_before_originless_get(tmp_path):
+    client, _ = make_client(tmp_path)
+    for host in ["evil.test", "evil.test:17865", "youtube.com:17865"]:
+        response = client.get("/health", headers={"Host": host})
+        assert response.status_code == 403
+        assert response.get_json()["error"]["code"] == "invalid_host"
+        assert client.get("/folder", headers={"Host": host}).status_code == 403
+        assert client.post("/jobs", headers={"Host": host, **HEADERS}, json={}).status_code == 403
+
+    assert client.get("/health", headers={"Host": "127.0.0.1:17865"}).status_code == 200
+
+
+def test_only_health_probe_allows_originless_get(tmp_path):
+    client, _ = make_client(tmp_path)
+    assert client.get("/health").status_code == 200
+    for url in ("/folder", "/jobs/job-1"):
+        response = client.get(url)
+        assert response.status_code == 403
+        assert response.get_json()["error"]["code"] == "extension_origin_required"
+        assert client.get(url, headers={"Origin": ORIGIN}).status_code == 200
+
+
+def test_rejects_other_chrome_extension_origin(tmp_path):
+    client, _ = make_client(tmp_path)
+    other_origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+    assert other_origin != ORIGIN
+
+    response = client.get("/health", headers={"Origin": other_origin})
+
+    assert response.status_code == 403
+    assert "Access-Control-Allow-Origin" not in response.headers
+
+
+def test_extension_origin_matches_manifest_identity():
+    assert ORIGIN == "chrome-extension://jampplgmnpaekfdpicamgkabmbeihdcb"
 
 
 def test_state_changing_requests_require_custom_header(tmp_path):
@@ -141,3 +178,56 @@ def test_valid_job_request_returns_job_id(tmp_path):
     assert response.status_code == 202
     assert response.get_json()["job_id"] == "job-1"
     assert len(manager.created[0][0]) == 1
+
+
+def test_job_request_rejects_mismatched_video_id_and_url(tmp_path):
+    root = tmp_path / "downloads"
+    root.mkdir()
+    store = SettingsStore(tmp_path / "settings.json")
+    store.save_download_root(root)
+    manager = FakeJobs()
+    client, _ = make_client(tmp_path, settings_store=store, job_manager=manager)
+    payload = {
+        "videos": [{
+            "video_id": "expected-id",
+            "url": "https://www.youtube.com/watch?v=different-id",
+            "title": "Title",
+            "channel_name": "Channel",
+        }],
+        "mode": "video",
+        "quality": "720",
+    }
+
+    response = client.post("/jobs", json=payload, headers=HEADERS)
+
+    assert response.status_code == 400
+    assert response.get_json()["error"]["code"] == "invalid_video"
+    assert manager.created == []
+
+
+def test_job_request_accepts_common_youtube_url_forms_when_id_matches(tmp_path):
+    root = tmp_path / "downloads"
+    root.mkdir()
+    store = SettingsStore(tmp_path / "settings.json")
+    store.save_download_root(root)
+
+    for url in [
+        "https://www.youtube.com/watch?v=abc123&feature=share",
+        "https://youtu.be/abc123?t=5",
+        "https://www.youtube.com/shorts/abc123",
+        "https://www.youtube.com/embed/abc123",
+        "https://www.youtube.com/live/abc123?feature=share",
+    ]:
+        manager = FakeJobs()
+        client, _ = make_client(tmp_path, settings_store=store, job_manager=manager)
+        response = client.post(
+            "/jobs",
+            json={
+                "videos": [{"video_id": "abc123", "url": url, "title": "Title", "channel_name": "Channel"}],
+                "mode": "video",
+                "quality": "720",
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 202, url
+        assert len(manager.created) == 1

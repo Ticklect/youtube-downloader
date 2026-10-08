@@ -4,6 +4,27 @@ $NativeRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "native_host"))
 $NativePrefix = $NativeRoot.TrimEnd('\') + '\'
 $RegistryPath = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.ycd.helper_control"
 $ManifestPath = [System.IO.Path]::GetFullPath((Join-Path $NativeRoot "install\com.ycd.helper_control.json"))
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+$Controller = Join-Path $NativeRoot "controller.py"
+$InstallDir = Join-Path $NativeRoot "install"
+
+if (Test-Path -LiteralPath $Python) {
+    & $Python $Controller --prepare-uninstall --repo-root $Root --config-dir $InstallDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Refusing to uninstall because the helper could not be safely stopped or verified."
+    }
+} else {
+    $ExpectedHelperHealthy = $false
+    try {
+        $Health = Invoke-RestMethod -Uri "http://127.0.0.1:17865/health" -Method Get -TimeoutSec 1
+        $ExpectedHelperHealthy = $Health.service -eq "youtube-channel-downloader"
+    } catch {
+        $ExpectedHelperHealthy = $false
+    }
+    if ($ExpectedHelperHealthy) {
+        throw "Helper environment is missing while the downloader helper is still running. Refusing to uninstall because ownership cannot be verified."
+    }
+}
 
 if (Test-Path -LiteralPath $RegistryPath) {
     $RegisteredManifest = Get-ItemPropertyValue -LiteralPath $RegistryPath -Name '(default)'

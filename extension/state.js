@@ -10,11 +10,30 @@ export function clearSelection() {
   return new Set();
 }
 
+export function matchingVideoIds(videos, query) {
+  const search = String(query || "").trim().toLocaleLowerCase();
+  return videos
+    .filter((video) => !search || `${video.title} ${video.video_id}`.toLocaleLowerCase().includes(search))
+    .map((video) => video.video_id);
+}
+
 export function canStartDownload({ folderPath, selectedIds, helperOnline, downloading, mode, dependencies }) {
   if (!Boolean(folderPath) || selectedIds.size === 0 || !helperOnline || downloading) return false;
   if (!dependencies?.yt_dlp) return false;
   if (mode === "transcript") return true;
   return Boolean(dependencies?.ffmpeg);
+}
+
+export function canLoadChannel({ channelLoading, downloading, helperTransition, helperOnline, helperCanStart, dependencies }) {
+  if (channelLoading || downloading || helperTransition || !helperCanStart) return false;
+  if (helperOnline && !dependencies?.yt_dlp) return false;
+  return true;
+}
+
+export function canToggleHelper({ helperTransition, downloading, helperOnline, helperControlAvailable }) {
+  if (helperTransition || !helperControlAvailable) return false;
+  if (downloading && helperOnline) return false;
+  return true;
 }
 
 export function canRetryFailed(job, downloading) {

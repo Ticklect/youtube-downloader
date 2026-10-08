@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows tests and release ZIP
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install -r helper/requirements.txt "pyinstaller>=6,<7"
+
+      - name: Test extension
+        run: npm test
+
+      - name: Test helper, native host, and release packaging
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: .\.venv\Scripts\python.exe -m pytest -q
+
+      - name: Match release tag to extension version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $expected = 'v' + (Get-Content extension/manifest.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne $expected) {
+            throw "Release tag must match extension/manifest.json: expected $expected"
+          }
+
+      - name: Build distributable
+        shell: powershell
+        run: .\scripts\build-release.ps1 -SkipTests -OutputDir release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: youtube-downloader-windows-${{ github.run_id }}
+          path: release/*.zip
+          if-no-files-found: error

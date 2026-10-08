@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import argparse
 import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 from urllib.request import urlopen
 
@@ -193,6 +195,19 @@ class HelperController:
             self._terminate_process(child)
         self._terminate_process(process)
 
+    @staticmethod
+    def _terminate_spawned_child(child) -> None:
+        try:
+            child.terminate()
+            child.wait(timeout=4)
+        except Exception:
+            try:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=2)
+            except Exception:
+                pass
+
     def status(self) -> dict:
         with self._exclusive_lock():
             process = self._verified_owned_process()
@@ -222,6 +237,8 @@ class HelperController:
                 raise ControllerError("Helper environment is missing. Run scripts/setup.ps1.", "venv_missing")
 
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            child = None
+            process = None
             try:
                 child = self.popen_factory(
                     self.helper_command,
@@ -234,6 +251,14 @@ class HelperController:
                 process = self.process_factory(child.pid)
                 self._save_state(self._capture_identity(process))
             except Exception as exc:
+                if process is not None:
+                    try:
+                        self._terminate_verified(process)
+                    except Exception:
+                        if child is not None:
+                            self._terminate_spawned_child(child)
+                elif child is not None:
+                    self._terminate_spawned_child(child)
                 self._clear_state()
                 raise ControllerError(f"Could not start helper: {exc}", "start_failed") from exc
 
@@ -262,3 +287,48 @@ class HelperController:
             if healthy:
                 raise ControllerError("Helper is still running after the owned process was stopped.", "stop_failed")
             return {"ok": True, "healthy": False, "owned": False}
+
+    def prepare_uninstall(self) -> dict:
+        with self._exclusive_lock():
+            had_state = self._load_state() is not None
+            process = self._verified_owned_process() if had_state else None
+
+            if process is not None:
+                self._terminate_verified(process)
+                self._clear_state()
+                deadline = self.monotonic() + 3.0
+                while self.health_probe() and self.monotonic() < deadline:
+                    self.sleep(0.1)
+                if self.health_probe():
+                    raise ControllerError(
+                        "Helper is still running after the owned process was stopped; refusing to uninstall.",
+                        "stop_failed",
+                    )
+                return {"ok": True, "stopped": True}
+
+            if self.health_probe():
+                raise ControllerError(
+                    "A helper is running but ownership could not be verified; refusing to uninstall.",
+                    "ownership_unverified",
+                )
+            return {"ok": True, "stopped": False}
+
+
+def _main(argv=None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--prepare-uninstall", action="store_true")
+    parser.add_argument("--repo-root")
+    parser.add_argument("--config-dir")
+    args = parser.parse_args(argv)
+    if not args.prepare_uninstall or not args.repo_root or not args.config_dir:
+        parser.error("--prepare-uninstall requires --repo-root and --config-dir")
+    try:
+        HelperController(args.repo_root, args.config_dir).prepare_uninstall()
+    except ControllerError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

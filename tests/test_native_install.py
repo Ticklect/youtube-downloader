@@ -76,9 +76,32 @@ def test_uninstaller_is_scoped_to_owned_registration_and_native_host_artifacts()
     assert "RegisteredManifest" in source
     assert "ManifestPath" in source
     assert "OrdinalIgnoreCase" in source
-    assert ".venv" not in source
+    assert ".venv\\Scripts\\python.exe" in source
     assert "HKLM:" not in source
     assert "Remove-Item" in source
+
+
+def test_uninstaller_stops_verified_helper_before_removing_registration_or_artifacts():
+    source = UNINSTALLER.read_text(encoding="utf-8")
+    guard = source.index("--prepare-uninstall")
+    registry_remove = source.index("Remove-Item -LiteralPath $RegistryPath")
+    artifact_loop = source.index('foreach ($name in @("install", "dist", "build"))')
+
+    assert guard < registry_remove < artifact_loop
+    assert "$LASTEXITCODE -ne 0" in source
+    assert "Refusing to uninstall" in source
+
+
+def test_uninstaller_allows_broken_install_cleanup_only_when_expected_helper_is_not_healthy():
+    source = UNINSTALLER.read_text(encoding="utf-8")
+    missing_venv_fallback = source.index("Invoke-RestMethod")
+    expected_service_check = source.index('$Health.service -eq "youtube-channel-downloader"')
+    refusal = source.index("Helper environment is missing while the downloader helper is still running")
+    registry_remove = source.index("Remove-Item -LiteralPath $RegistryPath")
+
+    assert "if (Test-Path -LiteralPath $Python)" in source
+    assert missing_venv_fallback < expected_service_check < refusal < registry_remove
+    assert '$ExpectedHelperHealthy = $false' in source
 
 
 def test_setup_invokes_native_host_installer_after_dependencies():

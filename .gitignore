@@ -8,3 +8,4 @@ node_modules/
 native_host/build/
 native_host/dist/
 native_host/install/
+release/
