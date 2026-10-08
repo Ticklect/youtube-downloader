@@ -35,6 +35,37 @@ test("sendControlCommand sends only fixed commands to the expected native host",
   await assert.rejects(() => sendControlCommand(chromeApi, "launch arbitrary.exe"), /Unsupported helper control command/);
 });
 
+test("Firefox credentials come from the same trusted native host", async () => {
+  const chromeApi = chromeWithNative(({ host, message, callback }) => {
+    assert.equal(host, HELPER_HOST_NAME);
+    assert.deepEqual(message, { command: "credentials" });
+    callback({ ok: true, token: "secret" });
+  });
+  assert.equal((await sendControlCommand(chromeApi, "credentials")).token, "secret");
+});
+
+test("Firefox browser API resolves native commands using Promises", async () => {
+  const firefoxApi = {
+    runtime: {
+      sendNativeMessage(host, message) {
+        assert.equal(host, HELPER_HOST_NAME);
+        assert.deepEqual(message, { command: "status" });
+        return Promise.resolve({ ok: true, owned: false, healthy: true });
+      },
+    },
+  };
+  const originalBrowser = globalThis.browser;
+  try {
+    globalThis.browser = firefoxApi;
+    assert.equal((await sendControlCommand(firefoxApi, "status")).healthy, true);
+    firefoxApi.runtime.sendNativeMessage = async () => { throw new Error("Native messaging host not found"); };
+    await assert.rejects(() => sendControlCommand(firefoxApi, "status"), (error) => error.code === "native_host_missing");
+  } finally {
+    if (originalBrowser === undefined) delete globalThis.browser;
+    else globalThis.browser = originalBrowser;
+  }
+});
+
 
 test("sendControlCommand classifies a missing native host", async () => {
   const chromeApi = chromeWithNative(({ callback, runtime }) => {

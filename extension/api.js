@@ -1,9 +1,18 @@
 export const API_BASE = "http://127.0.0.1:17865";
+let firefoxToken = null;
+
+export function setFirefoxToken(token) {
+  if (typeof token !== "string" || !/^[A-Za-z0-9+/]{43}=$/.test(token)) {
+    throw new Error("Firefox helper authorization returned an invalid token.");
+  }
+  firefoxToken = token;
+}
 
 async function request(path, { method = "GET", body, stateChanging = false } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (stateChanging) headers["X-YCD-Client"] = "1";
+  if (firefoxToken) headers["X-YCD-Token"] = firefoxToken;
 
   let response;
   try {

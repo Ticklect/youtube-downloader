@@ -23,7 +23,7 @@ WINDOWS_ONLY = pytest.mark.skipif(
 
 STATIC_FILES = {
     "README.md", "LICENSE", "helper/requirements.txt",
-    "extension/manifest.json", "extension/popup.html", "extension/popup.css",
+    "extension/manifest.json", "extension/browser-identities.json", "extension/popup.html", "extension/popup.css",
     "extension/popup.js", "extension/api.js", "extension/helper-control.js",
     "extension/job-lifecycle.js", "extension/state.js", "extension/storage-queue.js",
     "scripts/setup.ps1", "scripts/start-helper.ps1", "scripts/install-native-host.ps1",
@@ -38,6 +38,11 @@ def _expected_files():
         for directory in ("helper", "native_host")
         for path in (ROOT / directory).glob("*.py")
     }
+
+
+def _release_name(version: str, browser: str) -> str:
+    label = "Firefox-Windows-Temporary" if browser == "Firefox" else "Chrome-Windows"
+    return f"YouTube-Downloader-v{version}-{label}.zip"
 
 
 def _build_release(root: Path, output: Path):
@@ -60,13 +65,16 @@ def _archive_files(archive: Path):
 
 
 @WINDOWS_ONLY
-def test_release_archive_is_complete_and_runs_from_clean_extraction(tmp_path):
+@pytest.mark.parametrize("browser", ["Chrome", "Firefox"])
+def test_release_archive_is_complete_and_runs_from_clean_extraction(tmp_path, browser):
     output = tmp_path / "output"
     built = _build_release(ROOT, output)
     assert built.returncode == 0, built.stdout + built.stderr
 
     version = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))["version"]
-    archive = output / f"YouTube-Downloader-v{version}.zip"
+    archive = output / _release_name(version, browser)
+    other_browser = "Firefox" if browser == "Chrome" else "Chrome"
+    assert (output / _release_name(version, other_browser)).is_file()
     assert archive.is_file(), built.stdout
     assert f"SHA256: {hashlib.sha256(archive.read_bytes()).hexdigest().upper()}" in built.stdout
     assert _archive_files(archive) == _expected_files()
@@ -88,11 +96,24 @@ assert service.get('/health').status_code == 200
 assert service.get('/folder').status_code == 403
 manifest = json.loads((root / 'extension/manifest.json').read_text(encoding='utf-8'))
 assert manifest['action']['default_popup'] == 'popup.html'
+ids = json.loads((root / 'extension/browser-identities.json').read_text(encoding='utf-8'))
+assert len(ids['key']) > 40 and ids['firefox_id']
 """
     subprocess.run(
         [sys.executable, "-I", "-c", smoke, str(extracted)],
         cwd=extracted, check=True, capture_output=True, text=True, timeout=20,
     )
+
+    with ZipFile(archive) as bundle:
+        manifest = json.loads(bundle.read("extension/manifest.json"))
+        identities = json.loads(bundle.read("extension/browser-identities.json"))
+        assert identities["firefox_id"] == "youtube-downloader@ticklect.local"
+        if browser == "Firefox":
+            assert "key" not in manifest
+            assert manifest["browser_specific_settings"]["gecko"]["id"] == identities["firefox_id"]
+        else:
+            assert manifest["key"] == identities["key"]
+            assert "browser_specific_settings" not in manifest
 
     # The release must not include its own generated ZIP or local build files.
     assert all(
@@ -119,10 +140,11 @@ assert manifest['action']['default_popup'] == 'popup.html'
     rebuilt_output = extracted / "release"
     rebuilt = _build_release(extracted, rebuilt_output)
     assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
-    bumped_archive = rebuilt_output / f"YouTube-Downloader-v{bumped_version}.zip"
-    assert _archive_files(bumped_archive) == _expected_files()
-    with ZipFile(bumped_archive) as bundle:
-        assert json.loads(bundle.read("extension/manifest.json"))["version"] == bumped_version
+    for target_browser in ("Chrome", "Firefox"):
+        bumped_archive = rebuilt_output / _release_name(bumped_version, target_browser)
+        assert _archive_files(bumped_archive) == _expected_files()
+        with ZipFile(bumped_archive) as bundle:
+            assert json.loads(bundle.read("extension/manifest.json"))["version"] == bumped_version
 
 
 @WINDOWS_ONLY

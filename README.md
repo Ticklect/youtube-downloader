@@ -1,8 +1,8 @@
 # YouTube Downloader
 
-A Chrome extension for saving videos from a public YouTube channel to your Windows PC. Pick the videos you want; a local helper downloads them to your chosen folder.
+A Chrome and Firefox extension for saving videos from a public YouTube channel to your Windows PC. Pick the videos you want; a local helper downloads them to your chosen folder.
 
-**[Download the latest release](https://github.com/Ticklect/youtube-downloader/releases/latest)** · Windows 10/11 · Google Chrome
+**[Download the latest release](https://github.com/Ticklect/youtube-downloader/releases/latest)** · Windows 10/11 · Chrome or Firefox (temporary add-on)
 
 ## What it does
 
@@ -28,18 +28,20 @@ Choose between Video, Audio (MP3), Transcript and Everything, with quality contr
 
 ## Install
 
-You need **Chrome**, **Python 3.11+** and **FFmpeg** on Windows. You can install FFmpeg with `winget install Gyan.FFmpeg` (then reopen PowerShell).
+You need **Chrome or Firefox**, **Python 3.11+** and **FFmpeg** on Windows. You can install FFmpeg with `winget install Gyan.FFmpeg` (then reopen PowerShell).
 
-1. Download the [release ZIP](https://github.com/Ticklect/youtube-downloader/releases/latest) and **extract it to a permanent folder**. Don't run setup inside the ZIP or move the folder afterward.
+1. Download the **Chrome-Windows.zip** or **Firefox-Windows-Temporary.zip** for your browser from [GitHub Releases](https://github.com/Ticklect/youtube-downloader/releases/latest). **Extract it to a permanent folder.** Don't run setup inside the ZIP or move the folder afterward.
 2. Open PowerShell in the extracted folder and run:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
    ```
 
-3. In Chrome, open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked** and select the extracted **`extension`** folder.
+3. Install the extension:
+   - **Chrome:** Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and select the extracted `extension` folder.
+   - **Firefox (temporary developer install):** Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on**, and select `extension/manifest.json` from the extracted folder. It must be loaded again after Firefox restarts.
 
-Setup installs the local helper and registers it with Chrome. This is **not** a Chrome Web Store extension or a standalone installer.
+Setup installs the local helper and registers it with both browsers. The Firefox download is **unsigned**: standard Firefox requires Mozilla signing for permanent add-on installation. This release supports Firefox's temporary installation method; it is not yet a signed Firefox add-on.
 
 ## How to use it
 
@@ -66,7 +68,7 @@ Files are saved in folders organized by channel and video. Repeated downloads ca
 - **No videos or captions:** Check that the link points to a public channel, and that captions exist for the video.
 - **Download failed:** Check the item message and select **Retry failed** after the job finishes.
 
-To unregister the Chrome helper (without deleting downloaded files), run:
+To unregister the Chrome and Firefox helpers (without deleting downloaded files), run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/uninstall-helper-control.ps1

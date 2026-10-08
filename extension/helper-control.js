@@ -1,6 +1,6 @@
 export const HELPER_HOST_NAME = "com.ycd.helper_control";
 export const HELPER_SERVICE = "youtube-channel-downloader";
-const ALLOWED_COMMANDS = new Set(["status", "start", "stop"]);
+const ALLOWED_COMMANDS = new Set(["status", "start", "stop", "credentials"]);
 
 export class HelperControlError extends Error {
   constructor(message, code = "helper_control_failed") {
@@ -35,6 +35,20 @@ export function sendControlCommand(chromeApi, command) {
       "Helper control is not installed. Run scripts/setup.ps1 once.",
       "native_host_missing",
     ));
+  }
+
+  // Firefox's browser.* interface returns a Promise; Chromium's chrome.*
+  // interface expects a callback and reports failures via runtime.lastError.
+  if (typeof globalThis.browser !== "undefined" && chromeApi === globalThis.browser) {
+    return Promise.resolve()
+      .then(() => chromeApi.runtime.sendNativeMessage(HELPER_HOST_NAME, { command }))
+      .then((response) => {
+        if (!response || response.ok !== true) {
+          const error = response?.error || {};
+          throw new HelperControlError(error.message || "Native helper control failed.", error.code || "control_failed");
+        }
+        return response;
+      }, (error) => { throw classifyNativeRuntimeError(error?.message); });
   }
 
   return new Promise((resolve, reject) => {

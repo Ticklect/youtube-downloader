@@ -9,7 +9,7 @@ from native_host.protocol import ProtocolError, read_message, set_binary_stdio, 
 
 
 HOST_NAME = "com.ycd.helper_control"
-ALLOWED_COMMANDS = {"status", "start", "stop"}
+ALLOWED_COMMANDS = {"status", "start", "stop", "credentials"}
 
 
 def default_config_path() -> Path:
@@ -30,7 +30,7 @@ def load_controller(config_path: Path | None = None) -> HelperController:
 def dispatch_message(controller, message) -> dict:
     command = message.get("command") if isinstance(message, dict) else None
     if not isinstance(command, str) or command not in ALLOWED_COMMANDS or set(message) != {"command"}:
-        return {"ok": False, "error": {"code": "invalid_command", "message": "Command must be exactly status, start, or stop."}}
+        return {"ok": False, "error": {"code": "invalid_command", "message": "Unsupported helper control command."}}
     try:
         return getattr(controller, command)()
     except ControllerError as exc:

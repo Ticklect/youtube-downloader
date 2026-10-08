@@ -82,7 +82,7 @@ test("popup owns job persistence and stale-job recovery", async () => {
   assert.match(source, /getJobOrRecover/);
   assert.match(source, /retryJobOrRecover/);
   assert.match(source, /currentJobId/);
-  assert.match(source, /chrome\.storage\.local\.get\(\[[^\]]*"currentJobId"[^\]]*\]\)/s);
+  assert.match(source, /extensionBrowser\.storage\.local\.get\(\[[^\]]*"currentJobId"[^\]]*\]\)/s);
   assert.doesNotMatch(source, /openOrFocusDownloader/);
 });
 
@@ -94,7 +94,7 @@ test("popup persists the loaded channel and selection before opening the native 
   }
 
   assert.match(source, /await\s+savePreferences\(\);\s*\n\s*const\s+result\s*=\s*await\s+api\.pickFolder\(\)/);
-  assert.match(source, /chrome\.storage\.local\.get\(\[[^\]]*"channelUrl"[^\]]*"videos"[^\]]*"selectedIds"[^\]]*\]\)/s);
+  assert.match(source, /extensionBrowser\.storage\.local\.get\(\[[^\]]*"channelUrl"[^\]]*"videos"[^\]]*"selectedIds"[^\]]*\]\)/s);
   assert.match(source, /normalizeChannelDraft\(stored\)/);
 });
 

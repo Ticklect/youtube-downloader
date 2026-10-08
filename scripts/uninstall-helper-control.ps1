@@ -2,8 +2,16 @@ $ErrorActionPreference = "Stop"
 $Root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $NativeRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "native_host"))
 $NativePrefix = $NativeRoot.TrimEnd('\') + '\'
-$RegistryPath = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.ycd.helper_control"
-$ManifestPath = [System.IO.Path]::GetFullPath((Join-Path $NativeRoot "install\com.ycd.helper_control.json"))
+$BrowserRegistrations = @(
+    @{
+        registry = "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.ycd.helper_control"
+        manifest = [System.IO.Path]::GetFullPath((Join-Path $NativeRoot "install\com.ycd.helper_control.json"))
+    },
+    @{
+        registry = "HKCU:\Software\Mozilla\NativeMessagingHosts\com.ycd.helper_control"
+        manifest = [System.IO.Path]::GetFullPath((Join-Path $NativeRoot "install\firefox\com.ycd.helper_control.json"))
+    }
+)
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $Controller = Join-Path $NativeRoot "controller.py"
 $InstallDir = Join-Path $NativeRoot "install"
@@ -26,13 +34,17 @@ if (Test-Path -LiteralPath $Python) {
     }
 }
 
-if (Test-Path -LiteralPath $RegistryPath) {
-    $RegisteredManifest = Get-ItemPropertyValue -LiteralPath $RegistryPath -Name '(default)'
-    $RegisteredManifestPath = [System.IO.Path]::GetFullPath([string]$RegisteredManifest)
-    if ([string]::Equals($RegisteredManifestPath, $ManifestPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        Remove-Item -LiteralPath $RegistryPath -Recurse -Force
-    } else {
-        Write-Host "Native helper control registration belongs to another checkout; leaving it unchanged."
+foreach ($BrowserRegistration in $BrowserRegistrations) {
+    $RegistryPath = $BrowserRegistration.registry
+    $ManifestPath = $BrowserRegistration.manifest
+    if (Test-Path -LiteralPath $RegistryPath) {
+        $RegisteredManifest = Get-ItemPropertyValue -LiteralPath $RegistryPath -Name '(default)'
+        $RegisteredManifestPath = [System.IO.Path]::GetFullPath([string]$RegisteredManifest)
+        if ([string]::Equals($RegisteredManifestPath, $ManifestPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $RegistryPath -Recurse -Force
+        } else {
+            Write-Host "Native helper control registration belongs to another checkout; leaving it unchanged."
+        }
     }
 }
 

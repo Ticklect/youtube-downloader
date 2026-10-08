@@ -1,10 +1,11 @@
 from pathlib import Path
+import json
 from unittest.mock import patch
 
 from helper.channel import ChannelResult, VideoInfo
 from helper.dependencies import DependencyStatus
 from helper.settings import SettingsStore
-from helper.app import EXTENSION_ORIGIN, create_app
+from helper.app import EXTENSION_ORIGIN, create_app, MANIFEST_PATH
 
 
 ORIGIN = EXTENSION_ORIGIN
@@ -83,6 +84,40 @@ def test_rejects_other_chrome_extension_origin(tmp_path):
     assert "Access-Control-Allow-Origin" not in response.headers
 
 
+def test_firefox_origin_requires_native_messaging_token(tmp_path, monkeypatch):
+    token = "A" * 43 + "="
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"repo_root": str(MANIFEST_PATH.parent.parent), "firefox_token": token}))
+    monkeypatch.setattr("helper.app.FIREFOX_CONFIG_PATH", config)
+    client, _ = make_client(tmp_path)
+    origin = "moz-extension://12345678-1234-1234-1234-1234567890ab"
+
+    preflight = client.options("/folder", headers={"Origin": origin, "Access-Control-Request-Headers": "x-ycd-token"})
+    assert preflight.status_code == 204
+    assert preflight.headers["Access-Control-Allow-Origin"] == origin
+    assert "X-YCD-Token" in preflight.headers["Access-Control-Allow-Headers"]
+
+    for invalid in ({"Origin": origin}, {"Origin": origin, "X-YCD-Token": "B" * 43 + "="},
+                    {"Origin": "https://evil.example", "X-YCD-Token": token},
+                    {"Origin": "moz-extension://not-a-uuid", "X-YCD-Token": token}):
+        response = client.get("/folder", headers=invalid)
+        assert response.status_code == 403
+        assert "Access-Control-Allow-Origin" not in response.headers
+
+    allowed = client.get("/folder", headers={"Origin": origin, "X-YCD-Token": token})
+    assert allowed.status_code == 200
+    assert allowed.headers["Access-Control-Allow-Origin"] == origin
+    assert client.post("/channel", headers={"Origin": origin, "X-YCD-Token": token}, json={}).status_code == 403
+    assert client.get("/folder", headers={"X-YCD-Token": token}).status_code == 200
+    assert client.post("/folder/pick", headers={"Origin": origin, "X-YCD-Token": "B" * 43 + "=", "X-YCD-Client": "1"}).status_code == 403
+
+
+def test_firefox_token_is_rejected_without_installed_config(tmp_path, monkeypatch):
+    monkeypatch.setattr("helper.app.FIREFOX_CONFIG_PATH", tmp_path / "missing.json")
+    client, _ = make_client(tmp_path)
+    assert client.get("/folder", headers={"X-YCD-Token": "A" * 43 + "="}).status_code == 403
+
+
 def test_extension_origin_matches_manifest_identity():
     assert ORIGIN == "chrome-extension://jampplgmnpaekfdpicamgkabmbeihdcb"
 
@@ -111,7 +146,7 @@ def test_preflight_is_narrow_and_echoes_accepted_extension_origin(tmp_path):
     assert response.status_code == 204
     assert response.headers["Access-Control-Allow-Origin"] == ORIGIN
     assert response.headers["Access-Control-Allow-Methods"] == "GET, POST, OPTIONS"
-    assert response.headers["Access-Control-Allow-Headers"] == "Content-Type, X-YCD-Client"
+    assert response.headers["Access-Control-Allow-Headers"] == "Content-Type, X-YCD-Client, X-YCD-Token"
 
 
 def test_invalid_channel_url_returns_400_without_loading(tmp_path):

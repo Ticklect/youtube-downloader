@@ -35,15 +35,19 @@ def test_installer_generates_deterministic_native_manifest_and_config(tmp_path):
     artifact_root = tmp_path / "native"
     run_installer(artifact_root)
     manifest_path = artifact_root / "install" / f"{HOST_NAME}.json"
+    firefox_manifest_path = artifact_root / "install" / "firefox" / f"{HOST_NAME}.json"
     config_path = artifact_root / "install" / "config.json"
     first_manifest = manifest_path.read_text(encoding="utf-8")
+    first_firefox_manifest = firefox_manifest_path.read_text(encoding="utf-8")
     first_config = config_path.read_text(encoding="utf-8")
 
     run_installer(artifact_root)
 
     assert manifest_path.read_text(encoding="utf-8") == first_manifest
+    assert firefox_manifest_path.read_text(encoding="utf-8") == first_firefox_manifest
     assert config_path.read_text(encoding="utf-8") == first_config
     manifest = json.loads(first_manifest)
+    firefox_manifest = json.loads(first_firefox_manifest)
     config = json.loads(first_config)
     assert manifest["name"] == HOST_NAME
     assert manifest["description"] == "YouTube Downloader helper control"
@@ -56,12 +60,20 @@ def test_installer_generates_deterministic_native_manifest_and_config(tmp_path):
     extension_id = manifest["allowed_origins"][0].removeprefix("chrome-extension://").removesuffix("/")
     assert len(extension_id) == 32
     assert set(extension_id) <= set("abcdefghijklmnop")
-    assert config == {"repo_root": str(ROOT.resolve())}
+    assert config["repo_root"] == str(ROOT.resolve())
+    assert isinstance(config["firefox_token"], str) and len(config["firefox_token"]) == 44
+    assert "firefox_token" not in first_manifest and "firefox_token" not in first_firefox_manifest
+    assert firefox_manifest["name"] == HOST_NAME
+    assert firefox_manifest["path"] == manifest["path"]
+    assert "allowed_origins" not in firefox_manifest
+    extension = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
+    assert firefox_manifest["allowed_extensions"] == [extension["browser_specific_settings"]["gecko"]["id"]]
 
 
 def test_installer_registers_only_current_user_chrome_native_host_path():
     source = INSTALLER.read_text(encoding="utf-8")
     assert "HKCU:\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.ycd.helper_control" in source
+    assert "HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\com.ycd.helper_control" in source
     assert "HKLM:" not in source
     assert "Set-Item" in source
     assert "allowed_origins" in source
@@ -71,6 +83,7 @@ def test_uninstaller_is_scoped_to_owned_registration_and_native_host_artifacts()
     assert UNINSTALLER.exists()
     source = UNINSTALLER.read_text(encoding="utf-8")
     assert "HKCU:\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.ycd.helper_control" in source
+    assert "HKCU:\\Software\\Mozilla\\NativeMessagingHosts\\com.ycd.helper_control" in source
     assert "native_host" in source
     assert "Get-ItemPropertyValue" in source
     assert "RegisteredManifest" in source

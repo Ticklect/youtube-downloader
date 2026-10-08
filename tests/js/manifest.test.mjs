@@ -19,4 +19,6 @@ test("manifest exposes only the popup downloader and no tab-navigation permissio
   assert.deepEqual([...manifest.permissions].sort(), ["nativeMessaging", "storage"]);
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1:17865/*"]);
   assert.equal(manifest.content_scripts, undefined);
+  assert.equal(manifest.browser_specific_settings.gecko.id, "youtube-downloader@ticklect.local");
+  assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions.required, ["none"]);
 });

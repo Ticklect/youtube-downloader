@@ -16,6 +16,7 @@ import {
   summarizeProgress,
 } from "./state.js";
 
+const extensionBrowser = globalThis.browser ?? globalThis.chrome;
 const $ = (id) => document.getElementById(id);
 const els = {
   helperStatus: $("helperStatus"),
@@ -67,7 +68,7 @@ const state = {
   currentJobId: null,
   pollTimer: null,
 };
-const queueStorageWrite = createStorageQueue((snapshot) => chrome.storage.local.set(snapshot));
+const queueStorageWrite = createStorageQueue((snapshot) => extensionBrowser.storage.local.set(snapshot));
 let renderedJobId = null;
 
 function applyTheme(theme) {
@@ -301,7 +302,7 @@ async function requireHelper(actionName) {
   try {
     const result = await ensureHelperReady({
       api,
-      chromeApi: chrome,
+      chromeApi: extensionBrowser,
       autoStart: state.autoStartHelper,
     });
     if (!applyHealth(result.health)) throw new Error("Unexpected helper service responded on the local port.");
@@ -332,7 +333,7 @@ async function inspectHelperControl() {
   if (!applyHealth(health)) markHelperOff();
 
   try {
-    const status = await sendControlCommand(chrome, "status");
+    const status = await sendControlCommand(extensionBrowser, "status");
     state.helperControlAvailable = true;
     state.helperOwned = Boolean(status.owned);
     if (!state.helperOnline && status.healthy) {
@@ -386,7 +387,7 @@ async function recoverHelperAfterPollFailure() {
       autoStartHelper: state.autoStartHelper,
       ensureReady: () => ensureHelperReady({
         api,
-        chromeApi: chrome,
+        chromeApi: extensionBrowser,
         autoStart: true,
       }),
     });
@@ -650,7 +651,7 @@ els.retryFailed.addEventListener("click", async () => {
 });
 
 async function initialize() {
-  const stored = await chrome.storage.local.get([
+  const stored = await extensionBrowser.storage.local.get([
     "mode",
     "quality",
     "autoStartHelper",
@@ -685,6 +686,21 @@ async function initialize() {
     renderVideos();
   }
   refreshControls();
+
+  // Firefox assigns a different moz-extension:// origin per installation.
+  // Authorize through the registered native host before calling the local API.
+  if (extensionBrowser.runtime.getURL("").startsWith("moz-extension://")) {
+    try {
+      const credentials = await sendControlCommand(extensionBrowser, "credentials");
+      api.setFirefoxToken(credentials.token);
+    } catch (error) {
+      state.helperControlAvailable = false;
+      markHelperOff();
+      refreshControls();
+      showError(error.message);
+      return;
+    }
+  }
 
   await inspectHelperControl();
 

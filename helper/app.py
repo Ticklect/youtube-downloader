@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 from dataclasses import asdict
 import hashlib
+import hmac
 import json
 from pathlib import Path
+import re
 from urllib.parse import parse_qs, urlparse
 
 from flask import Flask, jsonify, make_response, request
@@ -17,10 +19,13 @@ from .settings import SettingsStore, pick_download_root
 PORT = 17865
 ALLOWED_HOSTS = {"127.0.0.1", f"127.0.0.1:{PORT}", "localhost", f"localhost:{PORT}"}
 ALLOWED_METHODS = "GET, POST, OPTIONS"
-ALLOWED_HEADERS = "Content-Type, X-YCD-Client"
+ALLOWED_HEADERS = "Content-Type, X-YCD-Client, X-YCD-Token"
 MODES = {"video", "audio", "transcript", "everything"}
 QUALITIES = {"360", "720", "1080", "best"}
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "extension" / "manifest.json"
+IDENTITIES_PATH = MANIFEST_PATH.with_name("browser-identities.json")
+FIREFOX_CONFIG_PATH = Path(__file__).resolve().parents[1] / "native_host" / "install" / "config.json"
+FIREFOX_ORIGIN = re.compile(r"^moz-extension://[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
 
 def _chromium_extension_id(manifest_key: str) -> str:
@@ -31,6 +36,8 @@ def _chromium_extension_id(manifest_key: str) -> str:
 def _extension_origin() -> str:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     manifest_key = manifest.get("key")
+    if not manifest_key and IDENTITIES_PATH.is_file():
+        manifest_key = json.loads(IDENTITIES_PATH.read_text(encoding="utf-8")).get("key")
     if not isinstance(manifest_key, str) or not manifest_key:
         raise RuntimeError("Extension manifest key is missing.")
     return f"chrome-extension://{_chromium_extension_id(manifest_key)}"
@@ -41,6 +48,22 @@ EXTENSION_ORIGIN = _extension_origin()
 
 def _valid_extension_origin(origin: str | None) -> bool:
     return origin == EXTENSION_ORIGIN
+
+
+def _valid_firefox_token(origin: str | None, token: str | None) -> bool:
+    if origin is not None and not FIREFOX_ORIGIN.fullmatch(origin):
+        return False
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9+/]{43}=", token):
+        return False
+    try:
+        config = json.loads(FIREFOX_CONFIG_PATH.read_text(encoding="utf-8"))
+        expected = config["firefox_token"]
+        root = config["repo_root"]
+        if not isinstance(root, str) or Path(root).resolve() != MANIFEST_PATH.parent.parent:
+            return False
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return isinstance(expected, str) and hmac.compare_digest(expected, token)
 
 
 def _error(code: str, message: str, status: int):
@@ -89,7 +112,8 @@ def create_app(
         origin = request.headers.get("Origin")
         if request.method == "GET" and request.path == "/health" and not origin:
             return None
-        if not _valid_extension_origin(origin):
+        firefox_preflight = request.method == "OPTIONS" and bool(origin and FIREFOX_ORIGIN.fullmatch(origin))
+        if not (_valid_extension_origin(origin) or firefox_preflight or _valid_firefox_token(origin, request.headers.get("X-YCD-Token"))):
             return _error("extension_origin_required", "Requests must come from the Chrome extension.", 403)
         if request.method == "OPTIONS":
             return make_response("", 204)
@@ -100,7 +124,8 @@ def create_app(
     @app.after_request
     def cors_headers(response):
         origin = request.headers.get("Origin")
-        if _valid_extension_origin(origin):
+        firefox_preflight = request.method == "OPTIONS" and bool(origin and FIREFOX_ORIGIN.fullmatch(origin))
+        if _valid_extension_origin(origin) or firefox_preflight or (origin and _valid_firefox_token(origin, request.headers.get("X-YCD-Token"))):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Vary"] = "Origin"
             response.headers["Access-Control-Allow-Methods"] = ALLOWED_METHODS

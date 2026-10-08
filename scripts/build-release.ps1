@@ -6,6 +6,19 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $Manifest = Get-Content -LiteralPath (Join-Path $Root "extension\manifest.json") -Raw | ConvertFrom-Json
+$ExistingIdentitiesPath = Join-Path $Root "extension\browser-identities.json"
+$ExistingIdentities = $null
+if (Test-Path -LiteralPath $ExistingIdentitiesPath -PathType Leaf) {
+    $ExistingIdentities = Get-Content -LiteralPath $ExistingIdentitiesPath -Raw | ConvertFrom-Json
+}
+$ChromePublicKey = [string]$Manifest.key
+if (-not $ChromePublicKey -and $ExistingIdentities) {
+    $ChromePublicKey = [string]$ExistingIdentities.key
+}
+$FirefoxExtensionId = [string]$Manifest.browser_specific_settings.gecko.id
+if (-not $FirefoxExtensionId -and $ExistingIdentities) {
+    $FirefoxExtensionId = [string]$ExistingIdentities.firefox_id
+}
 $Version = [string]$Manifest.version
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Extension manifest must have a release version such as 1.0.0."
@@ -15,11 +28,15 @@ if (-not $OutputDir) {
     $OutputDir = Join-Path $Root "release"
 }
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
-$Archive = Join-Path $OutputDir "YouTube-Downloader-v$Version.zip"
+$Browsers = @("Chrome", "Firefox")
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 
-if (Test-Path -LiteralPath $Archive) {
-    throw "Release package already exists: $Archive. Move or rename it before rebuilding."
+foreach ($Browser in $Browsers) {
+    $Label = if ($Browser -eq "Firefox") { "Firefox-Windows-Temporary" } else { "Chrome-Windows" }
+    $Archive = Join-Path $OutputDir "YouTube-Downloader-v$Version-$Label.zip"
+    if (Test-Path -LiteralPath $Archive) {
+        throw "Release package already exists: $Archive. Move or rename it before rebuilding."
+    }
 }
 
 if (-not $SkipTests) {
@@ -43,9 +60,6 @@ if (-not $SkipTests) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$BuildId = [guid]::NewGuid().ToString("N")
-$Staging = Join-Path $OutputDir ".ycd-stage-$BuildId"
-$TempArchive = Join-Path $OutputDir ".ycd-archive-$BuildId.zip"
 $OutputPrefix = $OutputDir.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
 
 function Copy-ReleaseFile([string]$RelativePath) {
@@ -58,6 +72,17 @@ function Copy-ReleaseFile([string]$RelativePath) {
     Copy-Item -LiteralPath $Source -Destination $Target
 }
 
+function Write-ReleaseJson([string]$Path, [object]$Value, [int]$Depth) {
+    $Json = ($Value | ConvertTo-Json -Depth $Depth) + "`n"
+    [System.IO.File]::WriteAllText($Path, $Json, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+foreach ($Browser in $Browsers) {
+    $Label = if ($Browser -eq "Firefox") { "Firefox-Windows-Temporary" } else { "Chrome-Windows" }
+    $Archive = Join-Path $OutputDir "YouTube-Downloader-v$Version-$Label.zip"
+    $BuildId = [guid]::NewGuid().ToString("N")
+    $Staging = Join-Path $OutputDir ".ycd-stage-$BuildId"
+    $TempArchive = Join-Path $OutputDir ".ycd-archive-$BuildId.zip"
 try {
     New-Item -ItemType Directory -Path $Staging | Out-Null
     foreach ($item in @("README.md", "LICENSE", "extension\manifest.json", "extension\popup.html", "extension\popup.css", "extension\popup.js", "extension\api.js", "extension\helper-control.js", "extension\job-lifecycle.js", "extension\state.js", "extension\storage-queue.js", "helper\requirements.txt")) {
@@ -75,6 +100,24 @@ try {
         Copy-ReleaseFile (Join-Path "extension\icons" $iconName)
     }
 
+    # Package separate manifests so each browser sees only supported identity
+    # fields, while the native helper can still register both browser hosts.
+    $BrowserManifest = Get-Content -LiteralPath (Join-Path $Staging "extension\manifest.json") -Raw | ConvertFrom-Json
+    $Identity = [ordered]@{
+        key = $ChromePublicKey
+        firefox_id = $FirefoxExtensionId
+    }
+    if (-not $Identity.key -or -not $Identity.firefox_id) {
+        throw "Both Chrome and Firefox extension identities are required."
+    }
+    Write-ReleaseJson (Join-Path $Staging "extension\browser-identities.json") $Identity 4
+    if ($Browser -eq "Chrome") {
+        $BrowserManifest.PSObject.Properties.Remove("browser_specific_settings")
+    } else {
+        $BrowserManifest.PSObject.Properties.Remove("key")
+    }
+    Write-ReleaseJson (Join-Path $Staging "extension\manifest.json") $BrowserManifest 8
+
     # Package to a temporary ZIP outside staging so failed builds never leave a
     # partially written public archive, and the ZIP cannot include itself.
     Compress-Archive -Path (Join-Path $Staging '*') -DestinationPath $TempArchive -CompressionLevel Optimal
@@ -86,7 +129,7 @@ try {
     $Zip = [System.IO.Compression.ZipFile]::OpenRead($TempArchive)
     try {
         $Entries = @($Zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-        foreach ($Required in @('README.md', 'extension/manifest.json', 'scripts/setup.ps1', 'native_host/host.py')) {
+        foreach ($Required in @('README.md', 'extension/manifest.json', 'extension/browser-identities.json', 'scripts/setup.ps1', 'native_host/host.py')) {
             if ($Entries -notcontains $Required) {
                 throw "Release ZIP is incomplete: $Required"
             }
@@ -126,4 +169,5 @@ try {
         }
         Remove-Item -LiteralPath $CanonicalTemp -Force
     }
+}
 }

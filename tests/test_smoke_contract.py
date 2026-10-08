@@ -28,6 +28,7 @@ def test_readme_documents_complete_setup_and_usage_path():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     required = [
         "chrome://extensions",
+        "about:debugging",
         "Load unpacked",
         "scripts/setup.ps1",
         "scripts/uninstall-helper-control.ps1",
@@ -69,6 +70,6 @@ def test_setup_and_popup_preserve_dependency_and_job_lifecycle_contracts():
 
     assert "Setup incomplete" in setup
     assert "currentJobId" in popup
-    assert "chrome.storage.local.get([" in popup
+    assert "extensionBrowser.storage.local.get([" in popup
     for key in ["mode", "quality", "folderPath", "currentJobId", "channelUrl", "channelName", "videos", "selectedIds"]:
         assert f'"{key}"' in popup

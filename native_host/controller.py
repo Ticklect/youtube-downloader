@@ -217,6 +217,18 @@ class HelperController:
                 "owned": process is not None,
             }
 
+    def credentials(self) -> dict:
+        # Only extensions listed in the browser's native host manifest can
+        # request this. The token is shared with the localhost helper.
+        try:
+            config = json.loads((self.config_dir / "config.json").read_text(encoding="utf-8"))
+            token = config["firefox_token"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ControllerError("Firefox helper authorization is not installed. Run scripts/setup.ps1.", "config_invalid") from exc
+        if not isinstance(token, str) or len(token) != 44:
+            raise ControllerError("Firefox helper authorization is invalid. Run scripts/setup.ps1.", "config_invalid")
+        return {"ok": True, "token": token}
+
     def start(self) -> dict:
         with self._exclusive_lock():
             owned_process = self._verified_owned_process()
