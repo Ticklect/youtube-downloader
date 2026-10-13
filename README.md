@@ -1,83 +1,61 @@
-# YouTube Downloader
+# YouTube Downloader Desktop
 
-A Chrome and Firefox extension for saving videos from a public YouTube channel to your Windows PC. Pick the videos you want; a local helper downloads them to your chosen folder.
+**Beta · Windows x64 · Rust + Slint**
 
-**[Download the latest release](https://github.com/Ticklect/youtube-downloader/releases/latest)** · Windows 10/11 · Chrome or Firefox (temporary add-on)
+A native Windows app for browsing a public YouTube channel, choosing uploads, and saving videos, audio or available captions to your PC. No browser extension or Python service is needed.
 
-## What it does
+![YouTube Downloader Desktop Library with sample videos](docs/screenshots/library.png)
 
-- Browse and search the **200 newest public videos** from a channel's Videos tab.
-- Download **MP4 video**, **MP3 audio**, **transcripts** or **Everything**.
-- Choose video quality: **360p**, **720p**, **1080p** or **Best available**, depending on what's available.
-- Choose a folder, track progress and retry failed downloads.
+[Download the desktop Beta](https://github.com/Ticklect/youtube-downloader/releases/tag/desktop-beta) · [Download options screenshot](docs/screenshots/options.png) · [Downloads screenshot](docs/screenshots/downloads.png)
 
-## Screenshots
+## Install on Windows
 
-The extension popup in **Red** and **Mono** themes. Click an image to view it at full size.
+1. Download the **Windows x64 ZIP** from the [desktop Beta release](https://github.com/Ticklect/youtube-downloader/releases/tag/desktop-beta).
+2. Extract the whole ZIP. Keep the `bin` folder next to `YouTube Downloader Desktop.exe`.
+3. Run `YouTube Downloader Desktop.exe`. Paste a public channel URL, load the videos, select the ones you want, then choose the output format and destination.
 
-<p align="center">
-  <a href="docs/screenshots/red-theme.png"><img src="docs/screenshots/red-theme.png" alt="YouTube Downloader popup in Red theme showing channel videos" width="315"></a>
-  <a href="docs/screenshots/mono-theme.png"><img src="docs/screenshots/mono-theme.png" alt="YouTube Downloader popup in Mono theme showing channel videos" width="315"></a>
-</p>
+The portable build bundles **yt-dlp, FFmpeg and Deno**. There is no separate server, login or Python installation. It is **not code-signed** and has no Windows installer yet.
 
-Choose between Video, Audio (MP3), Transcript and Everything, with quality controls for video downloads.
+## What it currently does
 
-<p align="center">
-  <a href="docs/screenshots/output-options.png"><img src="docs/screenshots/output-options.png" alt="Download destination, output format menu and quality selector" width="400"></a>
-</p>
+- Browse and search up to **200 recent public videos** from a channel.
+- Choose **Best, 1080p, 720p or 360p** video quality where available; save MP3 audio or English captions when available.
+- Pick a destination folder, monitor progress, cancel jobs, retry failures, and see completed downloads.
+- Switch between YouTube Red and Mono themes; restore the previous library, queue and settings on restart.
 
-## Install
+Downloads are performed locally through the bundled tools. App state is saved under `%LOCALAPPDATA%\YouTube Downloader Desktop\`.
 
-You need **Chrome or Firefox**, **Python 3.11+** and **FFmpeg** on Windows. You can install FFmpeg with `winget install Gyan.FFmpeg` (then reopen PowerShell).
+## Building from source
 
-1. Download the **Chrome-Windows.zip** or **Firefox-Windows-Temporary.zip** for your browser from [GitHub Releases](https://github.com/Ticklect/youtube-downloader/releases/latest). **Extract it to a permanent folder.** Don't run setup inside the ZIP or move the folder afterward.
-2. Open PowerShell in the extracted folder and run:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
-   ```
-
-3. Install the extension:
-   - **Chrome:** Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and select the extracted `extension` folder.
-   - **Firefox (temporary developer install):** Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on**, and select `extension/manifest.json` from the extracted folder. It must be loaded again after Firefox restarts.
-
-Setup installs the local helper and registers it with both browsers. The Firefox download is **unsigned**: standard Firefox requires Mozilla signing for permanent add-on installation. This release supports Firefox's temporary installation method; it is not yet a signed Firefox add-on.
-
-## How to use it
-
-1. Open the extension and paste a public channel URL (such as `https://www.youtube.com/@channel`).
-2. Click **Load channel**, search the list and select the videos you want.
-3. Click **Choose Folder**, then select Video, **Audio (MP3)**, **Transcript** or Everything.
-4. Set video quality if needed and click **Download**. Use **Retry failed** for any unsuccessful items.
-
-**Auto-start when needed** is enabled by default. To control the helper yourself, switch to **manual mode** and use **Turn On** / **Turn Off**.
-
-Files are saved in folders organized by channel and video. Repeated downloads can skip existing files; changing video quality downloads a fresh video.
-
-## Things to know
-
-- Only the **200 newest public uploads** from a channel's **Videos** tab are listed. Older uploads and Shorts-only listings aren't covered.
-- Private, members-only and login-required videos aren't supported. Transcripts require available captions.
-- Downloads run on your PC. The helper listens on `127.0.0.1:17865` and contacts YouTube through [yt-dlp](https://github.com/yt-dlp/yt-dlp); there is no separate project cloud service.
-- Only download content you own or have **permission** to save. DRM bypass is not supported.
-
-## Troubleshooting
-
-- **Helper won't start:** Rerun `scripts/setup.ps1` and reload the extension. In manual mode, click **Turn On**. As a fallback, run `powershell -ExecutionPolicy Bypass -File scripts/start-helper.ps1`.
-- **FFmpeg missing:** Run `ffmpeg -version`; install FFmpeg and reopen PowerShell if it isn't found.
-- **No videos or captions:** Check that the link points to a public channel, and that captions exist for the video.
-- **Download failed:** Check the item message and select **Retry failed** after the job finishes.
-
-To unregister the Chrome and Firefox helpers (without deleting downloaded files), run:
+Requires Windows x64, stable Rust with the MSVC toolchain, Windows SDK/C++ build tools and PowerShell. The `bin` tools are downloaded and checksum-verified by the packaging script. You do not need Python unless you want to regenerate the icon.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/uninstall-helper-control.ps1
+cargo fmt --all -- --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --release --locked
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Tag Local-Build
 ```
 
-After moving the install folder or upgrading to a new release, run setup again and reload the extension.
+The output is `dist\YouTube Downloader Desktop Beta Local-Build\` and a matching ZIP. Use a new tag for each packaging run; the script deliberately refuses to overwrite existing builds. The UI test suite is Windows-specific:
 
-## Source and license
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-beta-acceptance.ps1 -Executable 'dist\YouTube Downloader Desktop Beta Local-Build\YouTube Downloader Desktop.exe' -CaptureMatrix
+```
 
-To build a release ZIP from a source checkout with dependencies installed, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1`.
+These smoke tests use isolated synthetic session data rather than your real library or downloads. The screenshots above also use sample content.
 
-Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/), Flask and PyInstaller. Licensed under **AGPL-3.0**; see [LICENSE](LICENSE).
+## Desktop versus the extension-only alternative
+
+The **desktop Beta is the main application in this repository**. A separate **browser-only extension experiment** is in development for people who prefer not to install a desktop app. It is not bundled here or published as an equivalent replacement yet. Direct browser downloads have different format and conversion limitations; the desktop app uses yt-dlp and FFmpeg to support more outputs.
+
+The old Chrome/Firefox extension plus Python helper is **not** the current desktop application. Historical extension releases and their source remain available in the Git history and older GitHub Releases; do not use their setup instructions for this Beta.
+
+## Limitations and license
+
+- Windows x64 only; no signed installer and no macOS/Linux build tested.
+- Channel browsing shows up to 200 recent public uploads, not the entire archive. Shorts and captions can be limited by YouTube availability.
+- No private, members-only, DRM-protected or login-restricted video bypass. yt-dlp and YouTube can change, so some public downloads will fail.
+- Beta software; test before relying on it for large queues. Download only content you own or have permission to save.
+
+Source licensed under [AGPL-3.0](LICENSE). The UI uses [Slint](https://slint.dev/), with its required attribution accessible under **About & legal**. Portable builds also contain upstream FFmpeg notices; yt-dlp and Deno have their own upstream licenses.
