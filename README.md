@@ -6,11 +6,11 @@ A native Windows app for browsing a public YouTube channel, choosing uploads, an
 
 ![YouTube Downloader Desktop Library with sample videos](docs/screenshots/library.png)
 
-[Download the desktop Beta](https://github.com/Ticklect/youtube-downloader/releases/tag/desktop-beta) · [Download options screenshot](docs/screenshots/options.png) · [Downloads screenshot](docs/screenshots/downloads.png)
+[Download the desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta) · [Download options screenshot](docs/screenshots/options.png) · [Downloads screenshot](docs/screenshots/downloads.png)
 
 ## Install on Windows
 
-1. Download the **Windows x64 ZIP** from the [desktop Beta release](https://github.com/Ticklect/youtube-downloader/releases/tag/desktop-beta).
+1. Download the **Windows x64 ZIP** from the [desktop Beta release](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta).
 2. Extract the whole ZIP. Keep the `bin` folder next to `YouTube Downloader Desktop.exe`.
 3. Run `YouTube Downloader Desktop.exe`. Paste a public channel URL, load the videos, select the ones you want, then choose the output format and destination.
 
