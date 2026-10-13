@@ -5,7 +5,8 @@ use std::{fs, io};
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const MAX_JOBS: usize = 1_000;
-const MAX_FILE_BYTES: u64 = 2_000_000;
+// Accommodate a saved 1,000-video library plus bounded queue/history entries.
+const MAX_FILE_BYTES: u64 = 8_000_000;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SavedVideo {
@@ -251,11 +252,42 @@ mod tests {
             std::env::temp_dir().join(format!("ycd-large-session-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("session.json");
-        std::fs::write(&path, vec![b'x'; 2_000_010]).unwrap();
+        std::fs::write(&path, vec![b'x'; (MAX_FILE_BYTES + 10) as usize]).unwrap();
         assert!(load(&path).unwrap_err().contains("larger"));
         std::fs::write(&path, b"{ bad json").unwrap();
         assert!(load(&path).unwrap_err().contains("JSON"));
         std::fs::remove_file(&path).unwrap();
         std::fs::remove_dir(&dir).unwrap();
+    }
+
+    #[test]
+    fn thousand_video_library_roundtrips_without_losing_selections() {
+        let dir = std::env::temp_dir().join(format!("ycd-paged-library-{}", std::process::id()));
+        let path = dir.join("session.json");
+        let mut state = sample();
+        state.videos = (0..MAX_CHANNEL_VIDEOS)
+            .map(|index| SavedVideo {
+                video: Video {
+                    id: format!("{index:011}"),
+                    title: format!("Upload {index}: {}", "description ".repeat(15)),
+                    duration: "12:34".into(),
+                    uploaded: String::new(),
+                },
+                selected: index % 200 == 0,
+            })
+            .collect();
+        save(&path, &state).unwrap();
+        let restored = load(&path).unwrap().unwrap();
+        assert_eq!(restored.videos.len(), MAX_CHANNEL_VIDEOS);
+        assert_eq!(
+            restored
+                .videos
+                .iter()
+                .filter(|video| video.selected)
+                .count(),
+            5
+        );
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 }

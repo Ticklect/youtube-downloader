@@ -18,6 +18,7 @@ param(
     [switch]$ExerciseSelectionPopup,
     [switch]$ExerciseQueueHistory,
     [switch]$ExerciseRealChannelLoad,
+    [switch]$ExerciseRealChannelPagination,
     [string]$RealChannelUrl = 'https://www.youtube.com/@YouTube/videos',
     [switch]$CaptureHistoryConfirmation,
     [switch]$ExerciseWindowToggle,
@@ -81,6 +82,9 @@ if ($ActiveQueue -and ($Preview -ne 'queue' -or $EmptyState)) {
 }
 if ($ExerciseRealChannelLoad -and ($Preview -ne 'library' -or -not $EmptyState -or $ExerciseControls -or $ReuseSession)) {
     throw 'ExerciseRealChannelLoad requires isolated -Preview library -EmptyState without ExerciseControls or ReuseSession.'
+}
+if ($ExerciseRealChannelPagination -and (-not $ExerciseRealChannelLoad -or $WindowMode -ne 'normal')) {
+    throw 'ExerciseRealChannelPagination requires ExerciseRealChannelLoad and a normal-size window.'
 }
 if (-not $Executable) {
     $packagedBeta = Join-Path $root 'dist\YouTube Downloader Desktop Beta\YouTube Downloader Desktop.exe'
@@ -779,6 +783,42 @@ try {
             throw 'GUI failed to persist exactly five selected real channel videos.'
         }
         Write-Output 'GUI_REAL_CHANNEL_SELECT_FIVE_PASS'
+        if ($ExerciseRealChannelPagination) {
+            # Exercise the Slint ScrollView through actual Win32 wheel events,
+            # not UIAutomation's synthetic InvokePattern. Keep the user's live
+            # LOCALAPPDATA untouched; this entire app instance is isolated.
+            if (@($selected.videos).Count -ne 200) {
+                throw 'Pagination fixture requires a channel with at least 200 initial public videos.'
+            }
+            $wheelPointX = [int]($rect.Left + [Math]::Min(560, $width / 2))
+            $wheelPointY = [int]($rect.Top + [Math]::Min(515, $height - 235))
+            [void][WindowCapture]::SetForegroundWindow($handle)
+            Start-Sleep -Milliseconds 250
+            [uint32]$foregroundId = 0
+            [void][WindowCapture]::GetWindowThreadProcessId([WindowCapture]::GetForegroundWindow(), [ref]$foregroundId)
+            if ($foregroundId -ne $process.Id) { throw 'Scroll paging test app did not own foreground. Refusing physical scroll.' }
+            [void][WindowCapture]::SetCursorPos($wheelPointX, $wheelPointY)
+            Write-Output ('GUI_REAL_CHANNEL_WHEEL_BEGIN=' + $wheelPointX + ',' + $wheelPointY)
+            $wheelDown = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]-120), 0)
+            for ($step = 0; $step -lt 230; $step++) {
+                [WindowCapture]::mouse_event(0x0800, 0, 0, $wheelDown, [UIntPtr]::Zero)
+                Start-Sleep -Milliseconds 24
+            }
+            $expanded = $null
+            for ($attempt = 0; $attempt -lt 120; $attempt++) {
+                Start-Sleep -Seconds 1
+                try {
+                    $candidate = Get-Content -LiteralPath $sessionFile -Raw | ConvertFrom-Json
+                    if (@($candidate.videos).Count -gt 200) { $expanded = $candidate; break }
+                } catch { }
+            }
+            if (-not $expanded) { throw 'Scrolling to the end of 200 videos did not request the next channel page.' }
+            if (@($expanded.videos | Where-Object { $_.selected }).Count -ne 5) {
+                throw 'Scroll pagination lost the five existing video selections.'
+            }
+            if (@($expanded.videos).Count -gt 1000) { throw 'Channel pagination exceeded 1000 row cap.' }
+            Write-Output ('GUI_REAL_CHANNEL_SCROLL_PAGINATION_PASS total=' + @($expanded.videos).Count + ' selected=5')
+        }
         $current = $channelRoot.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
         $continue = @($current | Where-Object { $_.Current.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Current.Name -like 'Continue*' }) | Select-Object -First 1
         if (-not $continue) { throw 'Missing Continue after selecting five real channel videos.' }

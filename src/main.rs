@@ -206,6 +206,53 @@ fn reconcile_videos(
         .collect()
 }
 
+/// Append a later playlist page without losing a selection made while it was
+/// loading, and without duplicating entries returned by yt-dlp.
+fn append_channel_page(existing: &mut Vec<(Video, bool)>, page: Vec<Video>) -> usize {
+    let mut seen: std::collections::HashSet<String> =
+        existing.iter().map(|(video, _)| video.id.clone()).collect();
+    let original_len = existing.len();
+    for video in page {
+        if existing.len() >= engine::MAX_CHANNEL_VIDEOS {
+            break;
+        }
+        if seen.insert(video.id.clone()) {
+            existing.push((video, false));
+        }
+    }
+    existing.len() - original_len
+}
+
+#[derive(Default)]
+struct ChannelPages {
+    next_start: usize,
+    available: bool,
+    fetching: bool,
+}
+
+impl ChannelPages {
+    fn reset(&mut self, loaded: usize) {
+        // Duplicated IDs can leave a page with fewer than 200 saved rows.
+        // Continue from the next playlist page, never repeat earlier items.
+        self.next_start = if loaded == 0 {
+            1
+        } else {
+            ((loaded - 1) / engine::CHANNEL_PAGE_SIZE + 1) * engine::CHANNEL_PAGE_SIZE + 1
+        };
+        self.available =
+            loaded >= engine::CHANNEL_PAGE_SIZE && self.next_start <= engine::MAX_CHANNEL_VIDEOS;
+        self.fetching = false;
+    }
+
+    fn after_page(&mut self, page_len: usize, total: usize) {
+        self.next_start += engine::CHANNEL_PAGE_SIZE;
+        self.fetching = false;
+        self.available = page_len == engine::CHANNEL_PAGE_SIZE
+            && total < engine::MAX_CHANNEL_VIDEOS
+            && self.next_start <= engine::MAX_CHANNEL_VIDEOS;
+    }
+}
+
 fn set_visible_selection(items: &mut [(Video, bool)], search: &str, checked: bool) {
     let term = search.trim().to_lowercase();
     for (video, selected) in items {
@@ -265,15 +312,28 @@ fn publish_videos(ui: &MainWindow, state: &State) {
     // changes. Replacing the entire model on each toggle dropped keyboard
     // focus, so Space could not toggle the same video twice in succession.
     let previous = ui.get_videos();
-    let same_identity = previous.row_count() == visible_rows.len()
-        && visible_rows.iter().enumerate().all(|(index, row)| {
-            previous
-                .row_data(index)
-                .is_some_and(|existing| existing.id == row.id)
-        });
-    if same_identity {
-        for (index, row) in visible_rows.into_iter().enumerate() {
+    let previous_len = previous.row_count();
+    let prefix_identity = previous_len > 0
+        && previous_len <= visible_rows.len()
+        && visible_rows
+            .iter()
+            .take(previous_len)
+            .enumerate()
+            .all(|(index, row)| {
+                previous
+                    .row_data(index)
+                    .is_some_and(|existing| existing.id == row.id)
+            });
+    if prefix_identity {
+        for (index, row) in visible_rows.iter().take(previous_len).cloned().enumerate() {
             previous.set_row_data(index, row);
+        }
+        for row in visible_rows.into_iter().skip(previous_len) {
+            // The view is a VecModel. Appending rows retains the scroll offset,
+            // unlike replacing the repeater model at every loaded page.
+            previous
+                .push_row(row)
+                .expect("video model supports appending rows");
         }
     } else {
         ui.set_videos(ModelRc::from(Rc::new(VecModel::from(visible_rows))));
@@ -314,6 +374,10 @@ fn update_thumbnails(ui: &MainWindow, state: &Arc<Mutex<State>>) {
             .map(|(v, _)| v.clone())
             .collect::<Vec<_>>()
     };
+    update_page_thumbnails(ui, state, videos);
+}
+
+fn update_page_thumbnails(ui: &MainWindow, state: &Arc<Mutex<State>>, videos: Vec<Video>) {
     let weak_ui = ui.as_weak();
     let weak_state = Arc::downgrade(state);
     thumbnails::update_in_background(videos, move || {
@@ -596,6 +660,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui.set_channel_name(loaded_state.channel_name.clone().into());
     }
     let state = Arc::new(Mutex::new(loaded_state));
+    let pages = Arc::new(Mutex::new(ChannelPages::default()));
+    {
+        let mut paging = pages.lock().unwrap();
+        paging.reset(state.lock().unwrap().videos.len());
+        ui.set_more_available(paging.available);
+    }
     ui.set_download_folder(folder.display().to_string().into());
     ui.set_theme(state.lock().unwrap().theme.clone().into());
     // Visual smoke tests override only the displayed palette, without
@@ -687,6 +757,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.on_load_channel({
         let weak = ui.as_weak();
         let state = state.clone();
+        let pages = pages.clone();
         let channel_request_generation = channel_request_generation.clone();
         move || {
             let Some(ui) = weak.upgrade() else {
@@ -695,11 +766,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Even an invalid newer attempt supersedes an earlier in-flight
             // request. Otherwise the older response can replace its error.
             let generation = begin_channel_request(&channel_request_generation);
+            {
+                let mut paging = pages.lock().unwrap();
+                paging.reset(state.lock().unwrap().videos.len());
+                ui.set_more_available(false);
+                ui.set_loading_more(false);
+                ui.set_more_error("".into());
+            }
             let input = ui.get_channel_url().to_string();
             let canonical = match engine::channel_url(&input) {
                 Ok(url) => url,
                 Err(error) => {
                     ui.set_loading(false);
+                    ui.set_more_available(pages.lock().unwrap().available);
                     let previous = state.lock().unwrap();
                     if !previous.videos.is_empty() {
                         ui.set_channel_name(
@@ -719,6 +798,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(exe) => exe,
                 Err(error) => {
                     ui.set_loading(false);
+                    ui.set_more_available(pages.lock().unwrap().available);
                     show_channel_error(&ui, error);
                     return;
                 }
@@ -744,6 +824,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             show_error(&ui, "Scanning channel with yt-dlp…");
             let state = Arc::downgrade(&state);
             let weak = weak.clone();
+            let pages = pages.clone();
             let channel_request_generation = channel_request_generation.clone();
             std::thread::spawn(move || {
                 let result = engine::load_channel(&exe, &input);
@@ -757,6 +838,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ui.set_loading(false);
                     match result {
                         Ok((name, videos)) => {
+                            let page_len = videos.len();
                             ui.set_channel_name(name.clone().into());
                             show_error(
                                 &ui,
@@ -769,18 +851,137 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let mut value = state.lock().unwrap();
                                 value.channel_name = name;
                                 value.channel_url = canonical;
-                                value.videos =
-                                    reconcile_videos(&value.videos, videos, same_channel);
+                                let previous = value.videos.clone();
+                                value.videos = reconcile_videos(&previous, videos, same_channel);
+                                // Reloading the same channel must not erase
+                                // older pages or their selected videos.
+                                if same_channel {
+                                    let mut seen: std::collections::HashSet<String> = value
+                                        .videos
+                                        .iter()
+                                        .map(|(video, _)| video.id.clone())
+                                        .collect();
+                                    for (video, selected) in
+                                        previous.into_iter().skip(engine::CHANNEL_PAGE_SIZE)
+                                    {
+                                        if value.videos.len() >= engine::MAX_CHANNEL_VIDEOS {
+                                            break;
+                                        }
+                                        if seen.insert(video.id.clone()) {
+                                            value.videos.push((video, selected));
+                                        }
+                                    }
+                                }
                                 value.persist();
+                                let mut paging = pages.lock().unwrap();
+                                paging.reset(value.videos.len());
+                                if page_len < engine::CHANNEL_PAGE_SIZE {
+                                    paging.available = false;
+                                }
+                                ui.set_more_available(paging.available);
                             }
                             publish(&ui, &state.lock().unwrap());
                             update_thumbnails(&ui, &state);
                         }
                         Err(error) => {
+                            ui.set_more_available(pages.lock().unwrap().available);
                             if !same_channel {
                                 ui.set_channel_name("Channel could not be loaded".into());
                             }
                             show_channel_error(&ui, error);
+                        }
+                    }
+                });
+            });
+        }
+    });
+
+    ui.on_load_more({
+        let weak = ui.as_weak();
+        let state = state.clone();
+        let pages = pages.clone();
+        let channel_request_generation = channel_request_generation.clone();
+        move || {
+            let Some(ui) = weak.upgrade() else { return };
+            if ui.get_loading() || !ui.get_video_search().is_empty() {
+                return;
+            }
+            let start = {
+                let mut paging = pages.lock().unwrap();
+                if paging.fetching || (!paging.available && ui.get_more_error().is_empty()) {
+                    return;
+                }
+                paging.fetching = true;
+                paging.next_start
+            };
+            let generation = channel_request_generation.load(Ordering::SeqCst);
+            let (url, executable) = {
+                let value = state.lock().unwrap();
+                (
+                    value.channel_url.clone(),
+                    engine::find_dependency("yt-dlp.exe"),
+                )
+            };
+            let executable = match executable {
+                Ok(exe) => exe,
+                Err(error) => {
+                    pages.lock().unwrap().fetching = false;
+                    ui.set_more_available(false);
+                    ui.set_more_error(error.into());
+                    return;
+                }
+            };
+            ui.set_more_available(false);
+            ui.set_loading_more(true);
+            ui.set_more_error("".into());
+            let weak = weak.clone();
+            let pages = pages.clone();
+            let state = Arc::downgrade(&state);
+            let channel_request_generation = channel_request_generation.clone();
+            std::thread::spawn(move || {
+                let result = engine::load_channel_page(&executable, &url, start);
+                let _ = slint::invoke_from_event_loop(move || {
+                    if channel_request_generation.load(Ordering::SeqCst) != generation {
+                        return;
+                    }
+                    let (Some(ui), Some(state)) = (weak.upgrade(), state.upgrade()) else {
+                        return;
+                    };
+                    ui.set_loading_more(false);
+                    match result {
+                        Ok((_name, incoming)) => {
+                            let count = incoming.len();
+                            let appended = {
+                                let mut current = state.lock().unwrap();
+                                if current.channel_url != url {
+                                    return;
+                                }
+                                let added =
+                                    append_channel_page(&mut current.videos, incoming.clone());
+                                current.persist();
+                                let mut paging = pages.lock().unwrap();
+                                paging.after_page(count, current.videos.len());
+                                ui.set_more_available(paging.available);
+                                added
+                            };
+                            if appended > 0 {
+                                publish_videos(&ui, &state.lock().unwrap());
+                                update_page_thumbnails(&ui, &state, incoming);
+                            }
+                            show_error(
+                                &ui,
+                                format!(
+                                    "{} channel videos loaded.",
+                                    state.lock().unwrap().videos.len()
+                                ),
+                            );
+                        }
+                        Err(error) => {
+                            pages.lock().unwrap().fetching = false;
+                            ui.set_more_error(
+                                format!("Could not load more videos: {error}").into(),
+                            );
+                            ui.set_more_available(false);
                         }
                     }
                 });
@@ -1333,5 +1534,42 @@ mod ui_state_tests {
         assert_eq!(invalid_second, 2);
         assert_ne!(current.load(Ordering::SeqCst), first);
         assert_eq!(current.load(Ordering::SeqCst), invalid_second);
+    }
+
+    #[test]
+    fn scrolling_pagination_advances_in_batches_and_stops_at_end() {
+        let mut pages = ChannelPages::default();
+        pages.reset(200);
+        assert_eq!(pages.next_start, 201);
+        assert!(pages.available);
+        pages.fetching = true;
+        pages.after_page(200, 400);
+        assert_eq!(pages.next_start, 401);
+        assert!(pages.available);
+        assert!(!pages.fetching);
+        pages.after_page(58, 458);
+        assert!(!pages.available);
+        pages.reset(1_000);
+        assert!(!pages.available);
+        pages.reset(398);
+        assert_eq!(pages.next_start, 401);
+    }
+
+    #[test]
+    fn next_page_preserves_old_selections_and_skips_duplicate_ids() {
+        let mut rows = vec![(video("abcdefghijk", "Selected"), true)];
+        let appended = append_channel_page(
+            &mut rows,
+            vec![
+                video("abcdefghijk", "Duplicate"),
+                video("pqrstuvwxyz", "New entry"),
+                video("pqrstuvwxyz", "Repeated"),
+            ],
+        );
+        assert_eq!(appended, 1);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].0.title, "Selected");
+        assert!(rows[0].1);
+        assert!(!rows[1].1);
     }
 }

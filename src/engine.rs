@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use url::Url;
 
-pub const MAX_CHANNEL_VIDEOS: usize = 200;
-pub const MAX_SELECTED: usize = 200;
+pub const CHANNEL_PAGE_SIZE: usize = 200;
+pub const MAX_CHANNEL_VIDEOS: usize = 1_000;
+pub const MAX_SELECTED: usize = 1_000;
 pub const MAX_PARALLEL: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,6 +114,10 @@ pub fn channel_url(input: &str) -> Result<String, String> {
 }
 
 pub fn parse_channel_json(text: &str) -> Result<(String, Vec<Video>), String> {
+    parse_channel_page_json(text, false)
+}
+
+fn parse_channel_page_json(text: &str, allow_empty: bool) -> Result<(String, Vec<Video>), String> {
     if text.len() > 12_000_000 {
         return Err("Channel metadata is unexpectedly large.".into());
     }
@@ -127,7 +132,7 @@ pub fn parse_channel_json(text: &str) -> Result<(String, Vec<Video>), String> {
         .ok_or("yt-dlp did not return a channel video list.")?;
     let mut found = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for entry in entries.iter().take(MAX_CHANNEL_VIDEOS * 2) {
+    for entry in entries.iter().take(CHANNEL_PAGE_SIZE * 2) {
         let id = entry["id"].as_str().unwrap_or("");
         if !validate_id(id) || !seen.insert(id.to_owned()) {
             continue;
@@ -153,11 +158,11 @@ pub fn parse_channel_json(text: &str) -> Result<(String, Vec<Video>), String> {
             duration,
             uploaded,
         });
-        if found.len() >= MAX_CHANNEL_VIDEOS {
+        if found.len() >= CHANNEL_PAGE_SIZE {
             break;
         }
     }
-    if found.is_empty() {
+    if found.is_empty() && !allow_empty {
         return Err("No public videos were returned for this channel.".into());
     }
     Ok((name.chars().take(100).collect(), found))
@@ -342,6 +347,15 @@ pub fn find_dependency(file: &str) -> Result<PathBuf, String> {
 }
 
 pub fn load_channel(executable: &Path, url: &str) -> Result<(String, Vec<Video>), String> {
+    load_channel_page(executable, url, 1)
+}
+
+pub fn load_channel_page(
+    executable: &Path,
+    url: &str,
+    start: usize,
+) -> Result<(String, Vec<Video>), String> {
+    let (page_start, page_end) = channel_page_args(start)?;
     let url = channel_url(url)?;
     let runtime = executable
         .parent()
@@ -359,8 +373,10 @@ pub fn load_channel(executable: &Path, url: &str) -> Result<(String, Vec<Video>)
             &runtime_arg,
             "--flat-playlist",
             "--dump-single-json",
+            "--playlist-start",
+            &page_start,
             "--playlist-end",
-            "200",
+            &page_end,
             "--ignore-errors",
             "--no-warnings",
             "--socket-timeout",
@@ -373,14 +389,30 @@ pub fn load_channel(executable: &Path, url: &str) -> Result<(String, Vec<Video>)
     let child = command
         .spawn()
         .map_err(|e| format!("Unable to launch yt-dlp: {e}"))?;
-    let output = run_bounded(child, Duration::from_secs(75), None, |_, _| {})?;
+    let output = run_bounded(child, Duration::from_secs(100), None, |_, _| {})?;
     if !output.0 {
         return Err(
             "yt-dlp could not load the channel. Check the address and your network connection."
                 .into(),
         );
     }
-    parse_channel_json(&output.1)
+    if start == 1 {
+        parse_channel_json(&output.1)
+    } else {
+        parse_channel_page_json(&output.1, true)
+    }
+}
+
+fn channel_page_args(start: usize) -> Result<(String, String), String> {
+    if start == 0 || start > MAX_CHANNEL_VIDEOS || !(start - 1).is_multiple_of(CHANNEL_PAGE_SIZE) {
+        return Err("Invalid channel page offset.".into());
+    }
+    Ok((
+        start.to_string(),
+        (start + CHANNEL_PAGE_SIZE - 1)
+            .min(MAX_CHANNEL_VIDEOS)
+            .to_string(),
+    ))
 }
 
 #[cfg(windows)]
@@ -678,6 +710,30 @@ mod tests {
         assert_eq!(videos.len(), 2);
         assert_eq!(videos[0].duration, "1:05");
         assert!(parse_channel_json("not JSON").is_err());
+        assert!(parse_channel_json(r#"{"channel":"Empty","entries":[]}"#).is_err());
+        assert_eq!(
+            parse_channel_page_json(r#"{"channel":"Empty","entries":[]}"#, true)
+                .unwrap()
+                .1
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn later_pages_use_distinct_bounded_playlist_ranges() {
+        assert_eq!(channel_page_args(1).unwrap(), ("1".into(), "200".into()));
+        assert_eq!(
+            channel_page_args(201).unwrap(),
+            ("201".into(), "400".into())
+        );
+        assert_eq!(
+            channel_page_args(801).unwrap(),
+            ("801".into(), "1000".into())
+        );
+        for invalid in [0, 2, 200, 1_001, 1_201, usize::MAX] {
+            assert!(channel_page_args(invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]

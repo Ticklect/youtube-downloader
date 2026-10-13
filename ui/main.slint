@@ -136,6 +136,9 @@ export component MainWindow inherits Window {
     in-out property <int> failed-items: 0;
     in-out property <int> finished-items: 0;
     in-out property <bool> loading: false;
+    in-out property <bool> more-available: false;
+    in-out property <bool> loading-more: false;
+    in-out property <string> more-error: "";
     in-out property <bool> fullscreen-active: false;
     in-out property <bool> maximized-active: false;
     in-out property <bool> compact-view: false;
@@ -155,6 +158,7 @@ export component MainWindow inherits Window {
     callback toggle-fullscreen();
     callback toggle-maximize();
     callback load-channel();
+    callback load-more();
     callback toggle-video(string);
     callback search-videos();
     callback select-all();
@@ -374,6 +378,13 @@ export component MainWindow inherits Window {
                             Rectangle { height: 1px; background: root.edge; }
                             if root.videos.length > 0: ScrollView {
                                 vertical-stretch: 1;
+                                scrolled => {
+                                    if (root.more-available && !root.loading-more && !root.loading
+                                            && root.video-search == "" && root.page == "discover"
+                                            && -self.content-y + self.visible-height >= self.content-height - 224px) {
+                                        root.load-more();
+                                    }
+                                }
                                 VerticalLayout {
                                     spacing: 0px;
                                     for video[i] in root.videos: Rectangle {
@@ -460,6 +471,22 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                         Rectangle { y: parent.height - 1px; height: 1px; background: root.edge; }
+                                    }
+                                    if root.loading-more: Rectangle {
+                                        height: 46px; background: root.surface;
+                                        Text { text: "Loading 200 more videos…"; color: root.muted; font-size: 13px; vertical-alignment: center; horizontal-alignment: center; }
+                                    }
+                                    if root.more-error != "": Rectangle {
+                                        height: 52px; background: root.surface;
+                                        HorizontalLayout {
+                                            padding-left: 12px; padding-right: 12px; spacing: 12px;
+                                            Text { text: root.more-error; color: root.muted; font-size: 12px; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                                            ControlButton {
+                                                width: 94px; height: 34px; label: "Retry loading";
+                                                accent: root.accent; accent-ink: root.accent-ink; surface: root.field; border: root.edge; text-color: root.ink;
+                                                clicked => { root.load-more(); }
+                                            }
+                                        }
                                     }
                                 }
                             }

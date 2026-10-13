@@ -6,11 +6,11 @@ A Windows app for finding videos on a public YouTube channel, choosing what to s
 
 ![The desktop app showing a sample channel library](docs/screenshots/library.png)
 
-**[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta)** | [See download options](docs/screenshots/options.png) | [See the download queue](docs/screenshots/downloads.png)
+**[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/latest)** | [See download options](docs/screenshots/options.png) | [See the download queue](docs/screenshots/downloads.png)
 
 ## Install
 
-1. Open the [Desktop Beta release](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta) and download **`YouTube-Downloader-Desktop-Beta-Windows-x64.zip`**.
+1. Open the [latest Desktop Beta release](https://github.com/Ticklect/youtube-downloader-desktop/releases/latest) and download the **Windows x64 ZIP**.
 2. Right-click the ZIP and choose **Extract All**. Do not run the app from inside the ZIP.
 3. Open the extracted folder and run **`YouTube Downloader Desktop.exe`**.
 
@@ -32,7 +32,7 @@ You can also switch between the **YouTube Red** and **Mono** themes. The app rem
 
 | Feature | Current Beta |
 | --- | --- |
-| Channel browsing | Up to 200 recent public videos per channel |
+| Channel browsing | First 200 public videos immediately; scrolling near the bottom loads another 200, up to 1,000 |
 | Video | Best available, 1080p, 720p, or 360p, when available |
 | Audio | MP3 output |
 | Captions | English captions, if available for the video |
@@ -40,6 +40,8 @@ You can also switch between the **YouTube Red** and **Mono** themes. The app rem
 | Processing | Local yt-dlp, FFmpeg, and Deno tools included in the portable ZIP |
 
 Some uploads, formats, or captions may not be available. YouTube can change how videos are delivered, so not every download will succeed. Private, members-only, login-restricted, and DRM-protected content are not supported. This is a **Beta**, not a guarantee of uninterrupted downloads.
+
+To browse older uploads, keep scrolling down the **Library** list. The app loads more in batches instead of scanning the full channel upfront. Your selections remain checked while the next batch loads; if a request fails, use **Retry loading** at the end of the list.
 
 ## Responsible use and legal notice
 
