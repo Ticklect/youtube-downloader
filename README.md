@@ -1,33 +1,59 @@
 # YouTube Downloader Desktop
 
-**Beta · Windows x64 · Rust + Slint**
+**Windows x64 | Beta | Free and open source**
 
-A native Windows app for browsing a public YouTube channel, choosing uploads, and saving videos, audio or available captions to your PC. No browser extension or Python service is needed.
+A Windows app for finding videos on a public YouTube channel, choosing what to save, and downloading permitted videos, audio, or available captions. It runs on your PC; you do not need a browser extension, Python, or an account with this project.
 
-![YouTube Downloader Desktop Library with sample videos](docs/screenshots/library.png)
+![The desktop app showing a sample channel library](docs/screenshots/library.png)
 
-[Download the desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta) · [Download options screenshot](docs/screenshots/options.png) · [Downloads screenshot](docs/screenshots/downloads.png)
+**[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta)** | [See download options](docs/screenshots/options.png) | [See the download queue](docs/screenshots/downloads.png)
 
-## Install on Windows
+## Install
 
-1. Download the **Windows x64 ZIP** from the [desktop Beta release](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta).
-2. Extract the whole ZIP. Keep the `bin` folder next to `YouTube Downloader Desktop.exe`.
-3. Run `YouTube Downloader Desktop.exe`. Paste a public channel URL, load the videos, select the ones you want, then choose the output format and destination.
+1. Open the [Desktop Beta release](https://github.com/Ticklect/youtube-downloader-desktop/releases/tag/desktop-beta) and download **`YouTube-Downloader-Desktop-Beta-Windows-x64.zip`**.
+2. Right-click the ZIP and choose **Extract All**. Do not run the app from inside the ZIP.
+3. Open the extracted folder and run **`YouTube Downloader Desktop.exe`**.
 
-The portable build bundles **yt-dlp, FFmpeg and Deno**. There is no separate server, login or Python installation. It is **not code-signed** and has no Windows installer yet.
+Keep the `bin` folder beside the EXE. It contains the tools the app needs to download and process media. The portable download does **not** require a separate installation of Rust, Python, FFmpeg, or yt-dlp.
 
-## What it currently does
+The Beta is currently **Windows x64 only**. It is not code-signed and has no installer, so Windows may show an unrecognized-app warning. Only run files you trust; the release includes a `SHA256SUMS.txt` file if you want to verify the ZIP.
 
-- Browse and search up to **200 recent public videos** from a channel.
-- Choose **Best, 1080p, 720p or 360p** video quality where available; save MP3 audio or English captions when available.
-- Pick a destination folder, monitor progress, cancel jobs, retry failures, and see completed downloads.
-- Switch between YouTube Red and Mono themes; restore the previous library, queue and settings on restart.
+## How to use it
 
-Downloads are performed locally through the bundled tools. App state is saved under `%LOCALAPPDATA%\YouTube Downloader Desktop\`.
+1. Copy a public YouTube channel address, such as `https://www.youtube.com/@ChannelName/videos`.
+2. Paste it into the **Library** page and click **Load channel**.
+3. Tick the videos you want to save. Use the search box to narrow the list.
+4. Click **Continue**, then choose the download folder, format, and quality.
+5. Start the downloads. Open **Downloads** to check progress, open finished files, cancel active jobs, or retry failures.
 
-## Building from source
+You can also switch between the **YouTube Red** and **Mono** themes. The app remembers your channel, selected videos, settings, and download history between launches.
 
-Requires Windows x64, stable Rust with the MSVC toolchain, Windows SDK/C++ build tools and PowerShell. The `bin` tools are downloaded and checksum-verified by the packaging script. You do not need Python unless you want to regenerate the icon.
+## What it supports
+
+| Feature | Current Beta |
+| --- | --- |
+| Channel browsing | Up to 200 recent public videos per channel |
+| Video | Best available, 1080p, 720p, or 360p, when available |
+| Audio | MP3 output |
+| Captions | English captions, if available for the video |
+| Downloads | Folder selection, progress, cancellation, retry, and history |
+| Processing | Local yt-dlp, FFmpeg, and Deno tools included in the portable ZIP |
+
+Some uploads, formats, or captions may not be available. YouTube can change how videos are delivered, so not every download will succeed. Private, members-only, login-restricted, and DRM-protected content are not supported. This is a **Beta**, not a guarantee of uninterrupted downloads.
+
+## Responsible use and legal notice
+
+**Only use this software to download material you are permitted to download.** For example, this may include videos you created, material for which you have the rights holder's permission, or content whose licence or applicable law permits downloading. Check the actual permissions before downloading: **a video being publicly viewable does not automatically mean you have permission to save or redistribute it.**
+
+You are responsible for your own use of the software, including complying with copyright law, privacy rights, applicable regulations, and the terms of any platform or service you access. Do not use it to infringe someone else's rights or bypass DRM, paywalls, authentication, or other access restrictions. Downloading a file does not grant permission to republish or distribute it.
+
+**Disclaimer:** This project is provided **"as is"**, without warranties, as described in the [AGPL-3.0 licence](LICENSE). To the extent permitted by applicable law, the authors and maintainers disclaim liability for misuse of the software, infringement by users, lost data, service restrictions, or other damage arising from its use. **This notice does not automatically remove legal liability or override rights and obligations that cannot legally be excluded.**
+
+This is an independent project. It is **not affiliated with, sponsored by, or endorsed by YouTube or Google**. YouTube and Google names and marks belong to their respective owners.
+
+## For developers
+
+The desktop app is written in **Rust** and uses **Slint** for its native UI. On Windows, install stable Rust with the MSVC toolchain and Windows SDK/C++ build tools, then run:
 
 ```powershell
 cargo fmt --all -- --check
@@ -37,25 +63,16 @@ cargo build --release --locked
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Tag Local-Build
 ```
 
-The output is `dist\YouTube Downloader Desktop Beta Local-Build\` and a matching ZIP. Use a new tag for each packaging run; the script deliberately refuses to overwrite existing builds. The UI test suite is Windows-specific:
+The packaging script downloads and checksum-verifies the required tools. It creates a portable folder and ZIP under `dist/`, and refuses to overwrite an existing build with the same tag. To run the Windows GUI smoke tests against that package:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-beta-acceptance.ps1 -Executable 'dist\YouTube Downloader Desktop Beta Local-Build\YouTube Downloader Desktop.exe' -CaptureMatrix
 ```
 
-These smoke tests use isolated synthetic session data rather than your real library or downloads. The screenshots above also use sample content.
+Those tests use isolated sample data, not your real downloaded files. The screenshots in this README also show sample content. Your regular app settings and history are stored under `%LOCALAPPDATA%\YouTube Downloader Desktop\`.
 
-## Desktop versus the extension-only alternative
+## Other versions and licences
 
-The **desktop Beta is the main application in this repository**. A separate **browser-only extension experiment** is in development for people who prefer not to install a desktop app. It is not bundled here or published as an equivalent replacement yet. Direct browser downloads have different format and conversion limitations; the desktop app uses yt-dlp and FFmpeg to support more outputs.
+A separate **browser-only extension** is being developed as an alternative for people who do not want a desktop app. It is experimental, has different download limitations, and is **not included in this repository or release**. The old extension-plus-Python-helper project is retired; its source remains in Git history, not in the current desktop codebase.
 
-The old Chrome/Firefox extension plus Python helper is **not** the current desktop application. Historical extension releases and their source remain available in the Git history and older GitHub Releases; do not use their setup instructions for this Beta.
-
-## Limitations and license
-
-- Windows x64 only; no signed installer and no macOS/Linux build tested.
-- Channel browsing shows up to 200 recent public uploads, not the entire archive. Shorts and captions can be limited by YouTube availability.
-- No private, members-only, DRM-protected or login-restricted video bypass. yt-dlp and YouTube can change, so some public downloads will fail.
-- Beta software; test before relying on it for large queues. Download only content you own or have permission to save.
-
-Source licensed under [AGPL-3.0](LICENSE). The UI uses [Slint](https://slint.dev/), with its required attribution accessible under **About & legal**. Portable builds also contain upstream FFmpeg notices; yt-dlp and Deno have their own upstream licenses.
+This project's source is licensed under **[AGPL-3.0](LICENSE)**. The UI uses [Slint](https://slint.dev/) and includes its attribution under **About & legal**. Bundled yt-dlp, FFmpeg, and Deno have their own upstream licence terms and notices.
