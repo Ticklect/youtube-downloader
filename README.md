@@ -4,7 +4,7 @@
 
 A Windows app for finding videos on a public YouTube channel, choosing what to save, and downloading permitted videos, audio, or available captions. It runs on your PC; you do not need a browser extension, Python, or an account with this project.
 
-![The desktop app showing a sample channel library](docs/screenshots/library.png)
+![YouTube Downloader Desktop Beta browsing 259 videos from a public channel](docs/screenshots/library.png)
 
 **[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/latest)** | [See download options](docs/screenshots/options.png) | [See the download queue](docs/screenshots/downloads.png)
 
@@ -27,6 +27,18 @@ The Beta is currently **Windows x64 only**. It is not code-signed and has no ins
 5. Start the downloads. Open **Downloads** to check progress, open finished files, cancel active jobs, or retry failures.
 
 You can also switch between the **YouTube Red** and **Mono** themes. The app remembers your channel, selected videos, settings, and download history between launches.
+
+## Screenshots
+
+| Download options | Downloads and history |
+| :---: | :---: |
+| ![Choose video quality, audio, captions, and destination](docs/screenshots/options.png) | ![View completed downloads, failed jobs, and retry controls](docs/screenshots/downloads.png) |
+
+**Mono theme** — the same Library with a neutral colour scheme:
+
+![YouTube Downloader Desktop Beta in Mono theme](docs/screenshots/mono-library.png)
+
+The main Library screenshot shows a real public channel with **259 videos loaded** during pagination testing. The other screenshots use isolated example data. All were captured from the updated desktop Beta.
 
 ## What it supports
 
@@ -71,7 +83,7 @@ The packaging script downloads and checksum-verifies the required tools. It crea
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-beta-acceptance.ps1 -Executable 'dist\YouTube Downloader Desktop Beta Local-Build\YouTube Downloader Desktop.exe' -CaptureMatrix
 ```
 
-Those tests use isolated sample data, not your real downloaded files. The screenshots in this README also show sample content. Your regular app settings and history are stored under `%LOCALAPPDATA%\YouTube Downloader Desktop\`.
+Those tests use isolated sample data, not your real downloaded files. Your regular app settings and history are stored under `%LOCALAPPDATA%\YouTube Downloader Desktop\`.
 
 ## Other versions and licences
 
