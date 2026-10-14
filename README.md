@@ -4,9 +4,11 @@
 
 A Windows app for finding videos on a public YouTube channel, choosing what to save, and downloading permitted videos, audio, or available captions. It runs on your PC; you do not need a browser extension, Python, or an account with this project.
 
-![YouTube Downloader Desktop Beta browsing 259 videos from a public channel](docs/screenshots/library.png)
+[![Watch YouTube Downloader Desktop in action — 20-second demo](docs/media/desktop-demo-poster.jpg)](https://github.com/Ticklect/youtube-downloader-desktop/releases/download/desktop-beta-lazy-loading/YouTube-Downloader-Desktop-Demo.mp4)
 
-**[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/latest)** | [See download options](docs/screenshots/options.png) | [See the download queue](docs/screenshots/downloads.png)
+**[Watch or download the 20-second demo](https://github.com/Ticklect/youtube-downloader-desktop/releases/download/desktop-beta-lazy-loading/YouTube-Downloader-Desktop-Demo.mp4)** | **[Download the Desktop Beta](https://github.com/Ticklect/youtube-downloader-desktop/releases/latest)** | [See download options](docs/screenshots/options.png)
+
+The demo shows selecting videos from a channel, choosing video or audio formats and download quality, and managing downloads in the native Windows app.
 
 ## Install
 
@@ -29,6 +31,10 @@ The Beta is currently **Windows x64 only**. It is not code-signed and has no ins
 You can also switch between the **YouTube Red** and **Mono** themes. The app remembers your channel, selected videos, settings, and download history between launches.
 
 ## Screenshots
+
+**Library — browse a channel and select the videos you want:**
+
+![YouTube Downloader Desktop Beta browsing 259 videos from a public channel](docs/screenshots/library.png)
 
 | Download options | Downloads and history |
 | :---: | :---: |
