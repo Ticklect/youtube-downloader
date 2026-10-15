@@ -21,6 +21,11 @@ export struct TaskRow {
     state: string,
 }
 
+export struct ChannelRow {
+    name: string,
+    url: string,
+}
+
 component KeyboardTarget {
     in property <bool> enabled: true;
     out property <bool> has-hover <=> hit.has-hover;
@@ -52,6 +57,7 @@ component KeyboardTarget {
 
 component ControlButton inherits Rectangle {
     in property <string> label: "";
+    in property <length> min-button-width: 58px;
     in property <bool> enabled: true;
     in property <bool> selected: false;
     in property <bool> primary: false;
@@ -68,13 +74,16 @@ component ControlButton inherits Rectangle {
     forward-focus: area;
 
     height: 39px;
-    min-width: 58px;
+    min-width: root.min-button-width;
     border-radius: 6px;
     border-width: 1px;
     border-color: area.has-focus ? root.text-color : !root.enabled ? root.border : (root.primary || root.selected) ? root.accent : root.border;
     background: !root.enabled ? #252527 : (root.primary || root.selected) ? root.accent : area.has-hover ? #323337 : root.surface;
     Text {
         text: root.label;
+        x: 5px;
+        width: parent.width - 10px;
+        overflow: elide;
         color: !root.enabled ? #77797d : (root.primary || root.selected) ? root.accent-ink : root.text-color;
         font-size: 13px;
         font-weight: root.primary ? 700 : 600;
@@ -153,6 +162,8 @@ export component MainWindow inherits Window {
     in property <[VideoRow]> videos;
     in property <[VideoRow]> selected-videos;
     in property <[TaskRow]> tasks;
+    in property <[ChannelRow]> saved-channels;
+    in property <[ChannelRow]> recommended-channels;
 
     callback change-theme(string);
     callback toggle-fullscreen();
@@ -172,63 +183,12 @@ export component MainWindow inherits Window {
     callback cancel-job(int);
     callback retry-job(int);
     callback open-job-folder(int);
+    callback add-recommended-channel(string);
+    callback remove-saved-channel(string);
+    callback open-saved-channel(string);
 
     VerticalLayout {
         spacing: 0px;
-        Rectangle {
-            height: 54px;
-            background: root.mono ? #202020 : #17181b;
-            HorizontalLayout {
-                width: min(parent.width, 1420px);
-                x: (parent.width - self.width) / 2;
-                padding-left: 40px; padding-right: 40px;
-                spacing: 14px;
-                Rectangle { width: 42px; background: transparent;
-                    Rectangle {
-                        width: 42px; height: 30px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 7px;
-                        background: root.accent;
-                        Path {
-                            x: 15px; y: 8px; width: 12px; height: 14px;
-                            commands: "M 1 1 L 1 13 L 12 7 Z";
-                            fill: root.accent-ink;
-                        }
-                    }
-                }
-                Text { text: "YouTube Downloader Beta"; color: root.ink; font-size: 17px; font-weight: 700; vertical-alignment: center; }
-                Rectangle { horizontal-stretch: 1; background: transparent; }
-                Text { text: "THEME"; color: root.faded; font-size: 12px; font-weight: 700; vertical-alignment: center; }
-                Rectangle { width: 88px; background: transparent;
-                    ControlButton {
-                        width: parent.width; height: 34px; y: (parent.height - self.height) / 2;
-                        label: "YouTube"; selected: !root.mono;
-                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
-                        clicked => { root.change-theme("red"); }
-                    }
-                }
-                Rectangle { width: 71px; background: transparent;
-                    ControlButton {
-                        width: parent.width; height: 34px; y: (parent.height - self.height) / 2;
-                        label: "Mono"; selected: root.mono;
-                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
-                        clicked => { root.change-theme("mono"); }
-                    }
-                }
-                Rectangle { width: 1px; background: transparent;
-                    Rectangle { width: 1px; height: 24px; y: (parent.height - self.height) / 2; background: root.edge; }
-                }
-                Rectangle { width: 106px; background: transparent;
-                    ControlButton {
-                        width: parent.width; height: 34px; y: (parent.height - self.height) / 2;
-                        label: root.fullscreen-active ? "Exit full" : "Fullscreen";
-                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
-                        clicked => { root.toggle-fullscreen(); }
-                    }
-                }
-            }
-        }
-        Rectangle { height: 1px; background: root.edge; }
         Rectangle {
             height: 46px;
             background: root.canvas;
@@ -316,6 +276,188 @@ export component MainWindow inherits Window {
                             clicked => { root.load-channel(); }
                         }
                     }
+                    Rectangle {
+                        height: 47px;
+                        background: transparent;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Text {
+                                width: 55px;
+                                text: "SAVED";
+                                color: root.faded;
+                                font-size: 12px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            if root.saved-channels.length == 0: Text {
+                                text: "No saved channels yet";
+                                color: root.muted;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                            if root.saved-channels.length > 0: ScrollView {
+                                height: 47px;
+                                horizontal-stretch: 1;
+                                horizontal-scrollbar-policy: as-needed;
+                                vertical-scrollbar-policy: always-off;
+                                content-width: root.saved-channels.length * 196px;
+                                content-height: 36px;
+                                HorizontalLayout {
+                                    width: root.saved-channels.length * 196px;
+                                    height: 34px;
+                                    spacing: 6px;
+                                    for channel in root.saved-channels: Rectangle {
+                                        width: 190px;
+                                        height: 34px;
+                                        background: root.field;
+                                        border-width: 1px;
+                                        border-color: root.edge;
+                                        border-radius: 6px;
+                                        HorizontalLayout {
+                                            padding-left: 2px;
+                                            padding-right: 2px;
+                                            spacing: 2px;
+                                            ControlButton {
+                                                horizontal-stretch: 1;
+                                                height: 30px;
+                                                label: channel.name;
+                                                border: root.field;
+                                                surface: root.field;
+                                                accent: root.accent;
+                                                accent-ink: root.accent-ink;
+                                                text-color: root.ink;
+                                                clicked => { root.open-saved-channel(channel.url); }
+                                                Tooltip { text: @markdown("Open \{channel.url}"); }
+                                            }
+                                            ControlButton {
+                                                width: 30px;
+                                                min-button-width: 28px;
+                                                height: 30px;
+                                                label: "×";
+                                                accessible-label: "Remove " + channel.name + " from saved channels";
+                                                border: root.field;
+                                                surface: root.field;
+                                                accent: root.accent;
+                                                accent-ink: root.accent-ink;
+                                                text-color: root.muted;
+                                                clicked => { root.remove-saved-channel(channel.url); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                width: 158px;
+                                height: 47px;
+                                background: transparent;
+                                ControlButton {
+                                    width: parent.width;
+                                    height: 34px;
+                                    y: (parent.height - self.height) / 2;
+                                    label: "From your searches";
+                                    accent: root.accent;
+                                    accent-ink: root.accent-ink;
+                                    surface: root.surface;
+                                    border: root.edge;
+                                    text-color: root.ink;
+                                    clicked => { channel-suggestions.show(); }
+                                }
+                                channel-suggestions := PopupWindow {
+                                    x: -282px;
+                                    y: 48px;
+                                    width: 440px;
+                                    height: 277px;
+                                    close-policy: close-on-click-outside;
+                                    Rectangle {
+                                        background: root.surface;
+                                        border-width: 1px;
+                                        border-color: root.edge;
+                                        border-radius: 9px;
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 8px;
+                                            Text {
+                                                text: "Suggested from previous channel loads";
+                                                font-size: 16px;
+                                                font-weight: 700;
+                                                color: root.ink;
+                                            }
+                                            Text {
+                                                text: "Save a channel for one-click access above.";
+                                                font-size: 12px;
+                                                color: root.muted;
+                                            }
+                                            if root.recommended-channels.length == 0: Rectangle {
+                                                vertical-stretch: 1;
+                                                background: root.field;
+                                                border-radius: 6px;
+                                                Text {
+                                                    text: "No suggestions yet. Load channels to build your history.";
+                                                    color: root.muted;
+                                                    font-size: 13px;
+                                                    wrap: word-wrap;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            if root.recommended-channels.length > 0: ScrollView {
+                                                vertical-stretch: 1;
+                                                vertical-scrollbar-policy: as-needed;
+                                                horizontal-scrollbar-policy: always-off;
+                                                VerticalLayout {
+                                                    spacing: 5px;
+                                                    for suggestion in root.recommended-channels: Rectangle {
+                                                        height: 53px;
+                                                        background: root.field;
+                                                        border-radius: 5px;
+                                                        HorizontalLayout {
+                                                            padding-left: 12px;
+                                                            padding-right: 8px;
+                                                            spacing: 8px;
+                                                            VerticalLayout {
+                                                                padding-top: 7px;
+                                                                padding-bottom: 7px;
+                                                                spacing: 2px;
+                                                                horizontal-stretch: 1;
+                                                                Text {
+                                                                    text: suggestion.name;
+                                                                    font-size: 13px;
+                                                                    font-weight: 700;
+                                                                    color: root.ink;
+                                                                    overflow: elide;
+                                                                }
+                                                                Text {
+                                                                    text: suggestion.url;
+                                                                    font-size: 11px;
+                                                                    color: root.muted;
+                                                                    overflow: elide;
+                                                                }
+                                                            }
+                                                            ControlButton {
+                                                                width: 71px;
+                                                                height: 33px;
+                                                                label: "+ Save";
+                                                                accent: root.accent;
+                                                                accent-ink: root.accent-ink;
+                                                                surface: root.surface;
+                                                                border: root.edge;
+                                                                text-color: root.ink;
+                                                                clicked => {
+                                                                    root.add-recommended-channel(suggestion.url);
+                                                                    channel-suggestions.close();
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if root.channel-error != "": Rectangle {
                         height: 46px;
                         border-radius: 6px;
@@ -361,7 +503,7 @@ export component MainWindow inherits Window {
                         background: root.surface;
                         border-width: 1px; border-color: root.edge;
                         border-radius: 8px;
-                        height: min(root.videos.length > 0 ? 37px + root.videos.length * 64px + (root.expanded-video-id == "" ? 0px : 63px) : 240px, max(120px, root.height - (root.compact-view ? 425px : 408px) - (root.channel-error == "" ? 0px : 58px)));
+                        height: min(root.videos.length > 0 ? 37px + root.videos.length * 64px + (root.expanded-video-id == "" ? 0px : 63px) : 240px, max(120px, root.height - (root.compact-view ? 423px : 406px) - (root.channel-error == "" ? 0px : 58px)));
                         VerticalLayout {
                             spacing: 0px;
                             Rectangle {
@@ -1113,15 +1255,40 @@ export component MainWindow inherits Window {
         }
         Rectangle { height: 1px; background: root.edge; }
         Rectangle {
-            height: 37px; background: root.mono ? #202020 : #17181b;
+            height: 43px; background: root.mono ? #202020 : #17181b;
             HorizontalLayout {
                 width: min(parent.width, 1420px);
                 x: (parent.width - self.width) / 2;
-                padding-left: 40px; padding-right: 40px; spacing: 12px;
+                padding-left: 40px; padding-right: 40px; spacing: 8px;
                 Rectangle { width: 7px; background: transparent;
                     Rectangle { width: 7px; height: 7px; y: (parent.height - self.height) / 2; border-radius: 4px; background: root.muted; }
                 }
                 Text { text: root.status-text; color: root.muted; font-size: 12px; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
+                Text { text: "THEME"; color: root.faded; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                Rectangle { width: 78px; background: transparent;
+                    ControlButton {
+                        width: parent.width; height: 30px; y: (parent.height - self.height) / 2;
+                        label: "YouTube"; selected: !root.mono;
+                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
+                        clicked => { root.change-theme("red"); }
+                    }
+                }
+                Rectangle { width: 60px; background: transparent;
+                    ControlButton {
+                        width: parent.width; height: 30px; y: (parent.height - self.height) / 2;
+                        label: "Mono"; selected: root.mono;
+                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
+                        clicked => { root.change-theme("mono"); }
+                    }
+                }
+                Rectangle { width: 94px; background: transparent;
+                    ControlButton {
+                        width: parent.width; height: 30px; y: (parent.height - self.height) / 2;
+                        label: root.fullscreen-active ? "Exit full" : "Fullscreen";
+                        accent: root.accent; accent-ink: root.accent-ink; surface: root.surface; border: root.edge; text-color: root.ink;
+                        clicked => { root.toggle-fullscreen(); }
+                    }
+                }
                 Rectangle { width: 110px; background: transparent;
                     ControlButton {
                         width: parent.width; height: 29px; y: (parent.height - self.height) / 2;

@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod engine;
+mod recommendations;
 #[cfg(windows)]
 mod single_instance;
 mod store;
@@ -65,16 +66,20 @@ struct State {
     active: usize,
     channel_name: String,
     channel_url: String,
+    channel_history: Vec<store::SavedChannelHistory>,
+    saved_channels: Vec<store::SavedChannel>,
     folder: PathBuf,
 }
 
 impl State {
-    fn persist(&self) {
-        let snapshot = store::SavedState {
+    fn snapshot(&self) -> store::SavedState {
+        store::SavedState {
             schema: store::SCHEMA_VERSION,
             theme: self.theme.clone(),
             channel_name: self.channel_name.clone(),
             channel_url: self.channel_url.clone(),
+            channel_history: self.channel_history.clone(),
+            saved_channels: self.saved_channels.clone(),
             folder: self.folder.clone(),
             videos: self
                 .videos
@@ -102,16 +107,53 @@ impl State {
                     detail: job.detail.chars().take(300).collect(),
                 })
                 .collect(),
-        };
+        }
+    }
+
+    fn persist(&self) {
+        let snapshot = self.snapshot();
         if let Err(error) = store::save(&store::session_path(), &snapshot) {
             eprintln!("Unable to persist queue: {error}");
         }
     }
 }
 
+// Centralize all successful-load identity changes. yt-dlp controls its raw
+// metadata; the same validated display name must reach the UI, pinned bar,
+// current channel and persisted history.
+fn apply_loaded_channel_identity(state: &mut State, canonical: &str, raw_name: &str) -> String {
+    let name = recommendations::clean_name(raw_name);
+    recommendations::record_success(&mut state.channel_history, &name, canonical);
+    for saved in &mut state.saved_channels {
+        if saved.url == canonical {
+            saved.name = name.clone();
+        }
+    }
+    state.channel_name = name.clone();
+    state.channel_url = canonical.to_owned();
+    name
+}
+
 fn restore_state() -> (State, Option<String>) {
     match store::load(&store::session_path()) {
-        Ok(Some(saved)) => {
+        Ok(Some(mut saved)) => {
+            // Upgrade old session data from the last successfully loaded
+            // library. Never infer channels from a free-text search or failed
+            // load: this migration needs both a saved name and real videos.
+            if saved.channel_history.is_empty()
+                && !saved.channel_name.is_empty()
+                && !saved.channel_url.is_empty()
+                && !saved.videos.is_empty()
+            {
+                recommendations::record_success(
+                    &mut saved.channel_history,
+                    &saved.channel_name,
+                    &saved.channel_url,
+                );
+                if let Err(error) = store::save(&store::session_path(), &saved) {
+                    eprintln!("Unable to migrate previous channel visit: {error}");
+                }
+            }
             let had_previous_content = !saved.videos.is_empty() || !saved.jobs.is_empty();
             let jobs = saved
                 .jobs
@@ -157,6 +199,8 @@ fn restore_state() -> (State, Option<String>) {
                     active: 0,
                     channel_name: saved.channel_name,
                     channel_url: saved.channel_url,
+                    channel_history: saved.channel_history,
+                    saved_channels: saved.saved_channels,
                     folder: saved.folder,
                 },
                 if pending > 0 {
@@ -268,6 +312,26 @@ fn visible_selected_count(items: &[(Video, bool)], search: &str) -> usize {
         .iter()
         .filter(|(video, selected)| *selected && video.title.to_lowercase().contains(&term))
         .count()
+}
+
+fn publish_channels(ui: &MainWindow, state: &State) {
+    let saved = state
+        .saved_channels
+        .iter()
+        .map(|entry| ChannelRow {
+            name: entry.name.clone().into(),
+            url: entry.url.clone().into(),
+        })
+        .collect::<Vec<_>>();
+    let suggestions = recommendations::suggested(&state.channel_history, &state.saved_channels)
+        .into_iter()
+        .map(|entry| ChannelRow {
+            name: entry.name.into(),
+            url: entry.url.into(),
+        })
+        .collect::<Vec<_>>();
+    ui.set_saved_channels(ModelRc::from(Rc::new(VecModel::from(saved))));
+    ui.set_recommended_channels(ModelRc::from(Rc::new(VecModel::from(suggestions))));
 }
 
 fn publish_videos(ui: &MainWindow, state: &State) {
@@ -660,6 +724,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui.set_channel_name(loaded_state.channel_name.clone().into());
     }
     let state = Arc::new(Mutex::new(loaded_state));
+    publish_channels(&ui, &state.lock().unwrap());
     let pages = Arc::new(Mutex::new(ChannelPages::default()));
     {
         let mut paging = pages.lock().unwrap();
@@ -753,6 +818,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         show_error(&ui, notice);
     }
 
+    ui.on_add_recommended_channel({
+        let weak = ui.as_weak();
+        let state = state.clone();
+        move |url| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let mut value = state.lock().unwrap();
+            let history = value.channel_history.clone();
+            if recommendations::add_saved(&history, &mut value.saved_channels, &url) {
+                value.persist();
+                publish_channels(&ui, &value);
+            }
+        }
+    });
+    ui.on_remove_saved_channel({
+        let weak = ui.as_weak();
+        let state = state.clone();
+        move |url| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let mut value = state.lock().unwrap();
+            if recommendations::remove_saved(&mut value.saved_channels, &url) {
+                value.persist();
+                publish_channels(&ui, &value);
+            }
+        }
+    });
+    ui.on_open_saved_channel({
+        let weak = ui.as_weak();
+        let state = state.clone();
+        move |url| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let url = url.to_string();
+            if ui.get_loading()
+                || !state
+                    .lock()
+                    .unwrap()
+                    .saved_channels
+                    .iter()
+                    .any(|saved| saved.url == url)
+            {
+                return;
+            }
+            ui.set_page("discover".into());
+            ui.set_channel_url(url.into());
+            ui.invoke_load_channel();
+        }
+    });
+
     let channel_request_generation = Arc::new(AtomicU64::new(0));
     ui.on_load_channel({
         let weak = ui.as_weak();
@@ -839,7 +957,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match result {
                         Ok((name, videos)) => {
                             let page_len = videos.len();
-                            ui.set_channel_name(name.clone().into());
                             show_error(
                                 &ui,
                                 format!(
@@ -849,8 +966,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                             {
                                 let mut value = state.lock().unwrap();
-                                value.channel_name = name;
-                                value.channel_url = canonical;
+                                let clean_name =
+                                    apply_loaded_channel_identity(&mut value, &canonical, &name);
+                                ui.set_channel_name(clean_name.into());
                                 let previous = value.videos.clone();
                                 value.videos = reconcile_videos(&previous, videos, same_channel);
                                 // Reloading the same channel must not erase
@@ -873,6 +991,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                                 value.persist();
+                                publish_channels(&ui, &value);
                                 let mut paging = pages.lock().unwrap();
                                 paging.reset(value.videos.len());
                                 if page_len < engine::CHANNEL_PAGE_SIZE {
@@ -1409,6 +1528,61 @@ mod ui_state_tests {
             uploaded: String::new(),
         }
     }
+
+    #[test]
+    fn youtube_metadata_controls_and_long_unicode_name_do_not_break_queue_persistence() {
+        let url = "https://www.youtube.com/@testedcreator/videos";
+        // 4-byte characters exceed the storage's 400-byte name limit unless
+        // truncated by Unicode characters; the control characters must go.
+        let raw_name = format!("\0\n\t{}\u{007f}", "🦊".repeat(150));
+        let video = video("abcdefghijk", "Keep this queued video");
+        let mut state = State {
+            theme: "red".into(),
+            channel_name: "Previous creator".into(),
+            channel_url: url.into(),
+            folder: PathBuf::from(r"C:\Downloads"),
+            videos: vec![(video.clone(), true)],
+            jobs: vec![Job {
+                video,
+                mode: Mode::Video,
+                quality: "720".into(),
+                folder: PathBuf::from(r"C:\Downloads"),
+                status: JobState::Queued,
+                percent: 0,
+                detail: "Queued".into(),
+                cancel: Arc::new(AtomicBool::new(false)),
+            }],
+            saved_channels: vec![store::SavedChannel {
+                name: "Old pinned name".into(),
+                url: url.into(),
+            }],
+            ..State::default()
+        };
+        // This is the same helper used by the production yt-dlp success path.
+        let display_name = apply_loaded_channel_identity(&mut state, url, &raw_name);
+        assert_eq!(display_name.chars().count(), 100);
+        assert_eq!(display_name.len(), 400);
+        assert!(!display_name.chars().any(char::is_control));
+        assert_eq!(state.channel_name, display_name);
+        assert_eq!(state.saved_channels[0].name, display_name);
+        assert_eq!(state.channel_history[0].name, display_name);
+        let dir = std::env::temp_dir().join(format!(
+            "ycd-sanitized-channel-queue-{}",
+            std::process::id()
+        ));
+        let path = dir.join("session.json");
+        store::save(&path, &state.snapshot()).unwrap();
+        let restored = store::load(&path).unwrap().unwrap();
+        assert_eq!(restored.channel_name, display_name);
+        assert_eq!(restored.saved_channels[0].name, display_name);
+        assert_eq!(restored.channel_history[0].name, display_name);
+        assert_eq!(restored.jobs.len(), 1);
+        assert_eq!(restored.jobs[0].state, store::SavedJobStatus::Queued);
+        assert!(restored.videos[0].selected);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+
     #[test]
     fn reloading_same_channel_retains_only_matching_selected_ids() {
         let old = vec![

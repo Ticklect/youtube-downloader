@@ -24,11 +24,12 @@ The Beta is currently **Windows x64 only**. It is not code-signed and has no ins
 
 1. Copy a public YouTube channel address, such as `https://www.youtube.com/@ChannelName/videos`.
 2. Paste it into the **Library** page and click **Load channel**.
-3. Tick the videos you want to save. Use the search box to narrow the list.
-4. Click **Continue**, then choose the download folder, format, and quality.
-5. Start the downloads. Open **Downloads** to check progress, open finished files, cancel active jobs, or retry failures.
+3. After browsing channels, use **From your searches** to add a channel to the **Saved channels** bar. Open a saved channel again in one click, or remove it from the bar. Suggestions come from successfully loaded channels on this computer and are ranked from your search history; they are not endorsements or live YouTube recommendations.
+4. Tick the videos you want to save. Use the search box to narrow the list.
+5. Click **Continue**, then choose the download folder, format, and quality.
+6. Start the downloads. Open **Downloads** to check progress, open finished files, cancel active jobs, or retry failures.
 
-You can also switch between the **YouTube Red** and **Mono** themes. The app remembers your channel, selected videos, settings, and download history between launches.
+You can also switch between the **YouTube Red** and **Mono** themes. Theme and fullscreen controls are in the compact footer. The app remembers your current channel, selected videos, saved channels, settings, and download history between launches.
 
 ## Screenshots
 
@@ -44,13 +45,14 @@ You can also switch between the **YouTube Red** and **Mono** themes. The app rem
 
 ![YouTube Downloader Desktop Beta in Mono theme](docs/screenshots/mono-library.png)
 
-The main Library screenshot shows a real public channel with **259 videos loaded** during pagination testing. The other screenshots use isolated example data. All were captured from the updated desktop Beta.
+The main Library screenshot shows a real public channel with **259 videos loaded** during pagination testing. The other screenshots use isolated example data. These screenshots and the demo show an earlier Beta layout; the current Beta has a smaller top navigation area and a saved channels shelf.
 
 ## What it supports
 
 | Feature | Current Beta |
 | --- | --- |
 | Channel browsing | First 200 public videos immediately; scrolling near the bottom loads another 200, up to 1,000 |
+| Channel shortcuts | Suggested channels based on your local successful channel searches; pin to or remove from the saved channels bar |
 | Video | Best available, 1080p, 720p, or 360p, when available |
 | Audio | MP3 output |
 | Captions | English captions, if available for the video |
