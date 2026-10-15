@@ -28,6 +28,9 @@ export struct ChannelRow {
 
 component KeyboardTarget {
     in property <bool> enabled: true;
+    // Model row updates can invalidate the active focus item while the
+    // callback runs. Only opt-in controls (video checkboxes) reacquire it.
+    in property <bool> retain-focus-after-key: false;
     out property <bool> has-hover <=> hit.has-hover;
     out property <bool> has-focus <=> keyboard.has-focus;
     callback clicked <=> hit.clicked;
@@ -39,6 +42,9 @@ component KeyboardTarget {
         key-pressed(event) => {
             if (event.text == Key.Space || event.text == Key.Return) {
                 hit.clicked();
+                if (root.retain-focus-after-key && root.enabled) {
+                    keyboard.focus();
+                }
                 return accept;
             }
             return reject;
@@ -322,6 +328,7 @@ export component MainWindow inherits Window {
                                                 horizontal-stretch: 1;
                                                 height: 30px;
                                                 label: channel.name;
+                                                enabled: !root.loading;
                                                 border: root.field;
                                                 surface: root.field;
                                                 accent: root.accent;
@@ -437,7 +444,8 @@ export component MainWindow inherits Window {
                                                             ControlButton {
                                                                 width: 71px;
                                                                 height: 33px;
-                                                                label: "+ Save";
+                                                                label: root.saved-channels.length >= 16 ? "Full" : "+ Save";
+                                                                enabled: root.saved-channels.length < 16;
                                                                 accent: root.accent;
                                                                 accent-ink: root.accent-ink;
                                                                 surface: root.surface;
@@ -544,6 +552,7 @@ export component MainWindow inherits Window {
                                         video-hit := KeyboardTarget {
                                             width: parent.width; height: 64px;
                                             enabled: !root.loading;
+                                            retain-focus-after-key: true;
                                             clicked => { root.toggle-video(video.id); }
                                         }
                                         HorizontalLayout {

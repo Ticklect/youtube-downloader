@@ -334,7 +334,7 @@ fn publish_channels(ui: &MainWindow, state: &State) {
     ui.set_recommended_channels(ModelRc::from(Rc::new(VecModel::from(suggestions))));
 }
 
-fn publish_videos(ui: &MainWindow, state: &State) {
+fn publish_video_selection_counts(ui: &MainWindow, state: &State) {
     let filter = ui.get_video_search().to_string().trim().to_lowercase();
     let visible_selected = visible_selected_count(&state.videos, &filter);
     ui.set_visible_selected_items(visible_selected as i32);
@@ -351,6 +351,11 @@ fn publish_videos(ui: &MainWindow, state: &State) {
         )
         .into(),
     );
+}
+
+fn publish_videos(ui: &MainWindow, state: &State) {
+    publish_video_selection_counts(ui, state);
+    let filter = ui.get_video_search().to_string().trim().to_lowercase();
     let visible_rows = state
         .videos
         .iter()
@@ -402,6 +407,10 @@ fn publish_videos(ui: &MainWindow, state: &State) {
     } else {
         ui.set_videos(ModelRc::from(Rc::new(VecModel::from(visible_rows))));
     }
+    publish_selected_videos(ui, state);
+}
+
+fn publish_selected_videos(ui: &MainWindow, state: &State) {
     // The review screen must show the complete selection, even when Library
     // search filters the visible list. Otherwise saved selections look lost.
     ui.set_selected_videos(ModelRc::from(Rc::new(VecModel::from(
@@ -427,6 +436,34 @@ fn publish_videos(ui: &MainWindow, state: &State) {
             })
             .collect::<Vec<_>>(),
     ))));
+}
+
+/// Update a checkbox in the existing Slint model without replacing its
+/// ModelRc or recalculating thumbnail images. That keeps the focused repeater
+/// row alive during Space/Return interaction and preserves the current filter.
+fn set_video_row_selection(model: &ModelRc<VideoRow>, id: &str, selected: bool) -> bool {
+    for index in 0..model.row_count() {
+        let Some(mut row) = model.row_data(index) else {
+            continue;
+        };
+        if row.id.as_str() != id {
+            continue;
+        }
+        if row.selected != selected {
+            row.selected = selected;
+            model.set_row_data(index, row);
+        }
+        return true;
+    }
+    false
+}
+
+fn publish_video_selection_change(ui: &MainWindow, state: &State, id: &str, selected: bool) {
+    // A checkbox changes its selection only: rebuilding the entire Library
+    // model here can invalidate the Slint accessibility focus target.
+    set_video_row_selection(&ui.get_videos(), id, selected);
+    publish_video_selection_counts(ui, state);
+    publish_selected_videos(ui, state);
 }
 
 fn update_thumbnails(ui: &MainWindow, state: &Arc<Mutex<State>>) {
@@ -1113,17 +1150,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state = state.clone();
         move |id| {
             let Some(ui) = weak.upgrade() else { return };
-            if let Some((_, selected)) = state
-                .lock()
-                .unwrap()
+            let mut value = state.lock().unwrap();
+            let Some((_, selected)) = value
                 .videos
                 .iter_mut()
                 .find(|(video, _)| video.id == id.as_str())
-            {
-                *selected = !*selected;
-            }
-            state.lock().unwrap().persist();
-            publish(&ui, &state.lock().unwrap());
+            else {
+                return;
+            };
+            *selected = !*selected;
+            let selected = *selected;
+            value.persist();
+            publish_video_selection_change(&ui, &value, id.as_str(), selected);
         }
     });
     ui.on_search_videos({
@@ -1527,6 +1565,57 @@ mod ui_state_tests {
             duration: "1:30".to_string(),
             uploaded: String::new(),
         }
+    }
+
+    fn display_row(id: &str, title: &str, selected: bool) -> VideoRow {
+        VideoRow {
+            id: id.into(),
+            title: title.into(),
+            title_long: false,
+            detail: "1:30".into(),
+            secondary: "Creator".into(),
+            thumbnail: slint::Image::default(),
+            selected,
+        }
+    }
+
+    #[test]
+    fn selection_toggle_mutates_existing_rows_without_replacing_model_or_other_metadata() {
+        let backing = Rc::new(VecModel::from(vec![
+            display_row("abcdefghijk", "Gameplay upload", false),
+            display_row("pqrstuvwxyz", "Different upload", true),
+        ]));
+        let model = ModelRc::from(backing.clone());
+        assert!(set_video_row_selection(&model, "abcdefghijk", true));
+        assert!(backing.row_data(0).unwrap().selected);
+        assert!(backing.row_data(1).unwrap().selected);
+        assert!(set_video_row_selection(&model, "abcdefghijk", false));
+        assert!(!backing.row_data(0).unwrap().selected);
+        assert_eq!(
+            backing.row_data(0).unwrap().title.as_str(),
+            "Gameplay upload"
+        );
+        assert_eq!(backing.row_data(0).unwrap().secondary.as_str(), "Creator");
+        assert!(backing.row_data(1).unwrap().selected);
+        assert_eq!(model.row_count(), 2);
+    }
+
+    #[test]
+    fn filtered_model_ignores_non_visible_ids_without_replacing_visible_rows() {
+        // The search callback constructs filtered rows. A change to a video
+        // not displayed in the current filter must leave these rows untouched.
+        let backing = Rc::new(VecModel::from(vec![display_row(
+            "abcdefghijk",
+            "Gameplay upload",
+            false,
+        )]));
+        let model = ModelRc::from(backing.clone());
+        assert!(!set_video_row_selection(&model, "pqrstuvwxyz", true));
+        assert_eq!(backing.row_count(), 1);
+        assert_eq!(backing.row_data(0).unwrap().id.as_str(), "abcdefghijk");
+        assert!(!backing.row_data(0).unwrap().selected);
+        assert!(set_video_row_selection(&model, "abcdefghijk", true));
+        assert!(backing.row_data(0).unwrap().selected);
     }
 
     #[test]
